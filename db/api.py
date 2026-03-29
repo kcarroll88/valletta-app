@@ -80,7 +80,9 @@ tiers of music media and know that press is a long game built on specificity and
 Your expertise covers: press release writing, media pitching strategy, press kit management,
 release campaign planning, and music media landscape (blogs, trades, streaming press, radio).
 You are answering questions from Valletta band members. Be direct, specific, and realistic
-about what coverage is achievable versus a reach.""",
+about what coverage is achievable versus a reach.
+
+You have the ability to save press articles to the band's Media archive. When someone shares a URL to a press article, review, interview, or feature about the band, use the save_article tool to save it permanently. Confirm to the user that it has been saved to the Press & Media page.""",
 
     "cass": """You are Cass, the Social Media Strategist for Valletta — an independent rock band.
 You are platform-native, data-aware, and have strong opinions about what actually works.
@@ -305,6 +307,20 @@ CHAT_TOOLS = [
         }
     },
     {
+        "name": "save_article",
+        "description": "Save a press article or media clipping to the band's Press & Media archive. Use this when someone shares a URL to a news article, review, interview, or press feature about the band.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The full URL of the article to save"
+                }
+            },
+            "required": ["url"]
+        }
+    },
+    {
         "name": "create_contact",
         "description": "Create a new contact — either a person or a business/company",
         "input_schema": {
@@ -510,6 +526,31 @@ def _execute_tool(tool_name: str, tool_input: dict) -> dict:
             )
             conn.commit()
         return {"ok": True, "id": cur.lastrowid}
+    if tool_name == "save_article":
+        url = (tool_input.get("url") or "").strip()
+        if not url.startswith(("http://", "https://")):
+            return {"ok": False, "error": "Invalid URL"}
+        with get_db() as conn:
+            existing = conn.execute("SELECT id, title FROM media_articles WHERE url = ?", (url,)).fetchone()
+        if existing:
+            return {"ok": True, "duplicate": True, "id": existing["id"], "title": existing["title"]}
+        try:
+            meta = _scrape_article(url)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        ts = now_ts()
+        with get_db() as conn:
+            cur = conn.execute(
+                """INSERT INTO media_articles
+                   (url, title, author, publication, published_date, summary, image_url, content, scraped_at, created_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (url, meta["title"], meta["author"], meta["publication"],
+                 meta["published_date"], meta["summary"], meta["image_url"],
+                 meta.get("content"), ts, ts)
+            )
+            conn.commit()
+        return {"ok": True, "duplicate": False, "id": cur.lastrowid,
+                "title": meta["title"], "publication": meta.get("publication") or ""}
     if tool_name == "create_contact":
         contact_type = tool_input.get("contact_type", "person")
         with get_db() as conn:
@@ -2534,6 +2575,8 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
                     if block.name == "create_idea" and result.get("ok"):
                         idea_event = {**result, "title": block.input.get("title", "")}
                         yield f"data: {json.dumps({'idea_created': idea_event})}\n\n"
+                    elif block.name == "save_article" and result.get("ok"):
+                        yield f"data: {json.dumps({'tool_result': {'name': 'save_article', 'result': result}})}\n\n"
                     elif block.name in ("create_event", "create_roadmap_item", "create_contact") and result.get("ok"):
                         yield f"data: {json.dumps({'tool_result': {'name': block.name, 'result': result}})}\n\n"
 

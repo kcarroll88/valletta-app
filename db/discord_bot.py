@@ -69,6 +69,31 @@ class AttachmentData:
 
 load_dotenv(PROJECT_ROOT / ".env")
 
+# ── Press article URL helpers ─────────────────────────────────────────────────
+
+_NON_ARTICLE_DOMAINS = {
+    'spotify.com', 'music.apple.com', 'soundcloud.com', 'bandcamp.com',
+    'youtube.com', 'youtu.be', 'instagram.com', 'twitter.com', 'x.com',
+    'facebook.com', 'tiktok.com', 'discord.com', 'drive.google.com',
+    'docs.google.com', 'dropbox.com', 'linktr.ee', 'bit.ly',
+}
+
+
+def _extract_article_urls(text: str) -> list:
+    """Extract URLs from text that look like press article links."""
+    urls = re.findall(r'https?://[^\s<>"\']+', text)
+    article_urls = []
+    for url in urls:
+        try:
+            from urllib.parse import urlparse
+            domain = urlparse(url).netloc.lower().lstrip('www.')
+            if not any(domain.endswith(skip) for skip in _NON_ARTICLE_DOMAINS):
+                article_urls.append(url)
+        except Exception:
+            pass
+    return article_urls
+
+
 # ── Felix persona (exact match with api.py TEAM_PERSONAS['felix']) ────────────
 
 FELIX_PERSONA = """ABSOLUTE RULE — OUTPUT FORMAT: You are a conversational Discord bot. Every single reply you send must be plain conversational English. You must NEVER output JSON, code blocks, curly braces as data, key-value pairs, or any structured data format — not even a single `{` character used as data. This means no `{"title": ...}`, no `{"start": ...}`, no `{"allDay": ...}`, no FullCalendar format, no Google Calendar format, no data structures of any kind. When you add an event, contact, or task to the system, a separate background process handles the data extraction silently — you never see it and you never output it. You simply say something like "Got it, I'm putting that on the calendar for you." Nothing more. Any response containing `{`, `}`, `"start"`, `"end"`, `"allDay"`, or JSON syntax is a critical failure.
@@ -86,6 +111,8 @@ When you have integration context (calendar, tasks, etc.), weave it into your re
 You have a Task Master on the team named Tara. When questions come up about what to prioritize, what tasks matter most, whether to take something on, or how to scope a project — consult Tara. She runs the ICE framework and keeps the priority stack honest. You trust her calls on task management.
 
 You are empowered to add events to the band's calendar. When someone confirms a show, rehearsal, studio session, meeting, or any important date, proactively note that you're logging it: "I'm putting that on the calendar for you." — in plain English only, never with any JSON or structured data.
+
+When someone shares a press article URL in the Discord server, you can save it to the band's Press & Media archive. If you see a URL to what looks like a press article, review, or interview about the band, let the user know it's been saved.
 
 REMINDER — RESPONSE FORMAT: Plain English only. No JSON. No code blocks. No `{` or `}` characters used as data. No `"start"`, `"end"`, `"allDay"` fields. No structured output of any kind. The background extraction system handles all data — you only speak in natural language."""
 
@@ -1220,6 +1247,86 @@ Return ONLY: {{"pin": true, "reason": "brief reason"}} or {{"pin": false}}"""}]
         return False
 
 
+# ── Press article save ────────────────────────────────────────────────────────
+
+
+async def maybe_save_article_urls(
+    message_content: str,
+) -> list:
+    """Detect press article URLs in a Discord message and save them to media_articles.
+
+    Returns a list of result dicts: {url, title, publication, duplicate, error}.
+    """
+    article_urls = _extract_article_urls(message_content)
+    if not article_urls:
+        return []
+
+    press_keywords = [
+        'article', 'review', 'press', 'interview', 'feature', 'coverage',
+        'written about', 'check this out', 'published', 'mentioned', 'piece',
+    ]
+    has_press_context = any(kw in message_content.lower() for kw in press_keywords)
+
+    # Only act if there's press context OR it's a single URL (likely intentional share)
+    if not (has_press_context or len(article_urls) == 1):
+        return []
+
+    results = []
+
+    def _save_url(url: str) -> dict:
+        """Blocking DB + scrape call — run in executor."""
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        try:
+            existing = conn.execute(
+                "SELECT id, title FROM media_articles WHERE url = ?", (url,)
+            ).fetchone()
+            if existing:
+                return {"url": url, "duplicate": True,
+                        "title": existing["title"], "publication": ""}
+        finally:
+            conn.close()
+
+        # Scrape — import _scrape_article from api.py so we reuse the same logic
+        try:
+            sys.path.insert(0, str(PROJECT_ROOT))
+            from db.api import _scrape_article
+            meta = _scrape_article(url)
+        except Exception as e:
+            return {"url": url, "duplicate": False, "error": str(e)}
+
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        conn2 = sqlite3.connect(str(DB_PATH))
+        try:
+            conn2.execute(
+                """INSERT INTO media_articles
+                   (url, title, author, publication, published_date, summary, image_url, content, scraped_at, created_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (url, meta["title"], meta["author"], meta["publication"],
+                 meta["published_date"], meta["summary"], meta["image_url"],
+                 meta.get("content"), ts, ts)
+            )
+            conn2.commit()
+        except Exception as e:
+            return {"url": url, "duplicate": False, "error": str(e)}
+        finally:
+            conn2.close()
+
+        return {"url": url, "duplicate": False,
+                "title": meta["title"], "publication": meta.get("publication") or ""}
+
+    loop = asyncio.get_event_loop()
+    for url in article_urls[:2]:  # max 2 per message
+        try:
+            result = await loop.run_in_executor(None, _save_url, url)
+            results.append(result)
+        except Exception as e:
+            print(f"[Felix Bot] Article save error for {url}: {e}")
+
+    return results
+
+
 # ── Discord client ────────────────────────────────────────────────────────────
 
 intents = discord.Intents.default()
@@ -1429,7 +1536,28 @@ async def on_message(message: discord.Message):
                 except Exception as e:
                     print(f"[Felix Bot] Step 8 (event) error: {e}")
 
-            await asyncio.gather(_run_idea(), _run_pin(), _run_contact(), _run_event())
+            async def _run_article():
+                # Step 9: Press article detection — scrape and save any article URLs
+                try:
+                    article_results = await maybe_save_article_urls(message.content)
+                    for res in article_results:
+                        if "error" in res:
+                            print(f"[Felix Bot] Step 9 article save failed ({res['url']}): {res['error']}")
+                            continue
+                        if res.get("duplicate"):
+                            await message.channel.send(
+                                f"*\U0001f4f0 Already in Press & Media archive: **{res['title']}***"
+                            )
+                        else:
+                            pub = res.get("publication") or ""
+                            pub_str = f" ({pub})" if pub else ""
+                            await message.channel.send(
+                                f"*\U0001f4f0 Saved to Press & Media: **{res['title']}**{pub_str}*"
+                            )
+                except Exception as e:
+                    print(f"[Felix Bot] Step 9 (article) error: {e}")
+
+            await asyncio.gather(_run_idea(), _run_pin(), _run_contact(), _run_event(), _run_article())
 
     except Exception as exc:
         import traceback
