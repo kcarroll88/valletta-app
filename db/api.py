@@ -45,6 +45,7 @@ _ACTIVE_TOKENS: set[str] = set()
 GOOGLE_LOGIN_REDIRECT_URI = os.getenv(
     "GOOGLE_LOGIN_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"
 )
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 # ── Scheduler ─────────────────────────────────────────────────────────────────
 _SYNC_INTERVAL_SECS      = 3600   # full integration sync every 60 min
@@ -345,7 +346,12 @@ app = FastAPI(title="Valletta API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://vallettamusic.com",
+        "https://www.vallettamusic.com",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -2004,7 +2010,7 @@ def google_login_callback(code: str, state: str):
     from fastapi.responses import RedirectResponse as _Redirect
     from db.integrations.token_store import consume_state
 
-    FRONTEND_URL = "http://localhost:5173"
+    # FRONTEND_URL is defined at module level from env
 
     entry = consume_state(state)
     if not entry or entry.get("platform") != "app_login":
