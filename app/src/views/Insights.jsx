@@ -23,15 +23,11 @@ const PLATFORM_CONFIG = {
       { key: 'client_secret', label: 'Client Secret', type: 'password' },
     ],
   },
-  lastfm: {
-    label: 'Last.fm',
-    icon: '◉',
-    accent: '#d51007',
-    hint: 'Get free API key at last.fm/api',
-    fields: [
-      { key: 'artist_name', label: 'Artist Name', type: 'text' },
-      { key: 'api_key',     label: 'API Key',     type: 'text' },
-    ],
+  instagram: {
+    label: 'Instagram',
+    icon: '📷',
+    accent: '#E1306C',
+    hint: 'Connects via Instagram OAuth',
   },
   youtube: {
     label: 'YouTube',
@@ -45,7 +41,7 @@ const PLATFORM_CONFIG = {
   },
 }
 
-const PLATFORMS = ['spotify', 'lastfm', 'youtube']
+const PLATFORMS = ['spotify', 'instagram', 'youtube']
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
@@ -191,12 +187,15 @@ function ConnectModal({ platform, onClose, onSuccess }) {
 
 // ─── Platform Card ────────────────────────────────────────────────────────────
 
-function PlatformCard({ platform, data, ytAccount, onConnect, onDisconnect }) {
+function PlatformCard({ platform, data, ytAccount, igAccount, onConnect, onDisconnect }) {
   const cfg    = PLATFORM_CONFIG[platform]
-  // For YouTube, treat the card as connected if ytAccount has subscriber data
+  // For YouTube, treat connected if ytAccount has subscriber data
+  // For Instagram, treat connected if igAccount has followers data or data.connected
   const isConn = platform === 'youtube'
     ? (!!data?.connected || (ytAccount && ytAccount.subscribers != null))
-    : !!data?.connected
+    : platform === 'instagram'
+      ? (!!data?.connected || (igAccount && igAccount.followers != null))
+      : !!data?.connected
   const [disconnecting, setDisconnecting] = useState(false)
 
   const handleDisconnect = async () => {
@@ -244,34 +243,30 @@ function PlatformCard({ platform, data, ytAccount, onConnect, onDisconnect }) {
         </>
       )
     }
-    if (platform === 'lastfm') {
+    if (platform === 'instagram') {
+      const ig = (igAccount && igAccount.followers != null) ? igAccount : data
+      const followers   = ig?.followers
+      const mediaCount  = ig?.media_count
+      const username    = ig?.username
       return (
         <>
           <div style={{ fontSize: 36, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-            {fmt(data.listeners)}
+            {fmt(followers)}
           </div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', marginTop: 4, marginBottom: 12 }}>listeners</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', marginTop: 4, marginBottom: 12 }}>followers</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {data.playcount != null && (
+            {mediaCount != null && (
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>
-                <span style={{ color: 'rgba(255,255,255,0.30)' }}>Plays: </span>
-                {fmt(data.playcount)}
+                <span style={{ color: 'rgba(255,255,255,0.30)' }}>Posts: </span>
+                {fmt(mediaCount)}
               </div>
             )}
-            {data.name && (
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)' }}>{data.name}</div>
+            {username && (
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', marginTop: 2 }}>
+                @{username}
+              </div>
             )}
           </div>
-          {data.url && (
-            <a href={data.url} target="_blank" rel="noopener noreferrer" style={{
-              display: 'inline-block', marginTop: 10,
-              fontSize: 11, color: cfg.accent, textDecoration: 'none', opacity: 0.75,
-              transition: 'opacity 150ms',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.opacity = 1 }}
-              onMouseLeave={e => { e.currentTarget.style.opacity = 0.75 }}
-            >↗ Open on Last.fm</a>
-          )}
         </>
       )
     }
@@ -371,7 +366,18 @@ function PlatformCard({ platform, data, ytAccount, onConnect, onDisconnect }) {
               Not connected
             </div>
             <button
-              onClick={() => onConnect(platform)}
+              onClick={async () => {
+                if (platform === 'instagram') {
+                  try {
+                    const res = await api.instagramAuthStart()
+                    if (res?.url) window.location.href = res.url
+                  } catch (err) {
+                    console.error('Instagram OAuth start failed:', err)
+                  }
+                } else {
+                  onConnect(platform)
+                }
+              }}
               style={{
                 padding: '8px 18px', fontSize: 12, fontWeight: 600,
                 background: `${cfg.accent}22`,
@@ -496,7 +502,7 @@ function EmptyState({ onConnect }) {
           Connect your streaming platforms to track analytics
         </div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.30)' }}>
-          Link Spotify, Last.fm, and YouTube to see your audience metrics in one place.
+          Link Spotify, Instagram, and YouTube to see your audience metrics in one place.
         </div>
       </div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 8 }}>
@@ -609,6 +615,72 @@ function RecentVideos({ videos }) {
   )
 }
 
+// ─── Recent Posts Section ─────────────────────────────────────────────────────
+
+function RecentPosts({ posts }) {
+  if (!posts || posts.length === 0) return null
+
+  const sorted = [...posts]
+    .sort((a, b) => Number(b.likes || 0) - Number(a.likes || 0))
+    .slice(0, 10)
+
+  const IG_ACCENT = '#E1306C'
+
+  return (
+    <div style={{ ...GLASS_CARD, marginBottom: 24 }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase',
+        color: 'rgba(255,255,255,0.35)', marginBottom: 16,
+      }}>Recent Instagram Posts</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {sorted.map((post, i) => (
+          <div
+            key={i}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 14px',
+              background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
+              borderRadius: 8,
+              transition: 'background 150ms',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}
+          >
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', textTransform: 'capitalize' }}>
+              {post.media_type ? post.media_type.toLowerCase().replace('_', ' ') : 'post'}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              {[
+                { label: 'Likes',    value: post.likes,    accent: IG_ACCENT },
+                { label: 'Comments', value: post.comments, accent: 'rgba(255,255,255,0.40)' },
+              ].map(stat => stat.value != null && (
+                <span
+                  key={stat.label}
+                  style={{
+                    fontSize: 11, fontWeight: 600,
+                    padding: '3px 9px',
+                    borderRadius: 20,
+                    background: `${stat.accent}18`,
+                    color: stat.accent,
+                    border: `1px solid ${stat.accent}44`,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span style={{ opacity: 0.6, fontWeight: 400, marginRight: 3, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 9 }}>
+                    {stat.label}
+                  </span>
+                  {fmt(stat.value)}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Insights view ───────────────────────────────────────────────────────
 
 export default function Insights({ onNavigate }) {
@@ -619,6 +691,38 @@ export default function Insights({ onNavigate }) {
   const [modal,        setModal]        = useState(null) // platform id or null
   const [ytAccount,    setYtAccount]    = useState(null)
   const [ytVideos,     setYtVideos]     = useState(null)
+  const [igAccount,    setIgAccount]    = useState(null)
+  const [igPosts,      setIgPosts]      = useState(null)
+
+  const fetchInstagramData = () => {
+    api.instagramMetrics('account')
+      .then(res => {
+        if (Array.isArray(res) && res.length > 0) {
+          const record = res[res.length - 1]
+          const d = typeof record.data === 'string' ? JSON.parse(record.data) : (record.data || record)
+          setIgAccount({ ...d, synced_at: record.recorded_at || record.synced_at || null })
+        } else if (res && !Array.isArray(res)) {
+          setIgAccount(res)
+        } else {
+          setIgAccount({})
+        }
+      })
+      .catch(() => setIgAccount({}))
+
+    api.instagramMetrics('post')
+      .then(res => {
+        if (Array.isArray(res)) {
+          const parsed = res.map(r => {
+            const d = typeof r.data === 'string' ? JSON.parse(r.data) : (r.data || r)
+            return d
+          })
+          setIgPosts(parsed)
+        } else {
+          setIgPosts([])
+        }
+      })
+      .catch(() => setIgPosts([]))
+  }
 
   const fetchYoutubeData = () => {
     api.youtubeMetrics('account')
@@ -661,8 +765,15 @@ export default function Insights({ onNavigate }) {
   }
 
   useEffect(() => {
+    // Handle OAuth callback redirect — clean up URL and refresh
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('connected') === 'instagram') {
+      const clean = window.location.pathname + window.location.hash
+      window.history.replaceState({}, '', clean)
+    }
     fetchData()
     fetchYoutubeData()
+    fetchInstagramData()
   }, [])
 
   const handleSyncAll = () => {
@@ -670,6 +781,7 @@ export default function Insights({ onNavigate }) {
     api.insightsSync()
       .then(() => {
         fetchYoutubeData()
+        fetchInstagramData()
         return api.insights().then(setData)
       })
       .catch(e => setError(e.message))
@@ -684,6 +796,7 @@ export default function Insights({ onNavigate }) {
       const fresh = await api.insights()
       setData(fresh)
       fetchYoutubeData()
+      fetchInstagramData()
     } catch (e) {
       setError(e.message)
     } finally {
@@ -703,6 +816,7 @@ export default function Insights({ onNavigate }) {
   // Determine if any platform is connected
   const platformData = data?.platforms || {}
   const anyConnected = PLATFORMS.some(p => platformData[p]?.connected)
+    || (igAccount && igAccount.followers != null)
 
   // Build snapshot rows from connected platforms
   const snapshots = []
@@ -711,10 +825,10 @@ export default function Insights({ onNavigate }) {
     if (s.followers != null)  snapshots.push({ platform: 'spotify', metric: 'followers', value: s.followers, date: s.synced_at })
     if (s.popularity != null) snapshots.push({ platform: 'spotify', metric: 'popularity', value: s.popularity, date: s.synced_at })
   }
-  if (platformData.lastfm?.connected) {
-    const l = platformData.lastfm
-    if (l.listeners  != null) snapshots.push({ platform: 'lastfm', metric: 'listeners',  value: l.listeners,  date: l.synced_at })
-    if (l.playcount  != null) snapshots.push({ platform: 'lastfm', metric: 'playcount',  value: l.playcount,  date: l.synced_at })
+  if (igAccount && igAccount.followers != null) {
+    const ig = igAccount
+    if (ig.followers   != null) snapshots.push({ platform: 'instagram', metric: 'followers',   value: ig.followers,   date: ig.synced_at })
+    if (ig.media_count != null) snapshots.push({ platform: 'instagram', metric: 'media_count', value: ig.media_count, date: ig.synced_at })
   }
   if (platformData.youtube?.connected) {
     const y = platformData.youtube
@@ -794,7 +908,7 @@ export default function Insights({ onNavigate }) {
       {!loading && data && (
         <>
           {/* Platform cards */}
-          {(anyConnected || (ytAccount && ytAccount.subscribers != null)) ? (
+          {anyConnected ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
               {PLATFORMS.map(platform => (
                 <PlatformCard
@@ -802,6 +916,7 @@ export default function Insights({ onNavigate }) {
                   platform={platform}
                   data={platformData[platform] || null}
                   ytAccount={platform === 'youtube' ? ytAccount : undefined}
+                  igAccount={platform === 'instagram' ? igAccount : undefined}
                   onConnect={setModal}
                   onDisconnect={handleDisconnect}
                 />
@@ -816,6 +931,9 @@ export default function Insights({ onNavigate }) {
 
           {/* Recent Videos — shown whenever YouTube post data exists */}
           {ytVideos && ytVideos.length > 0 && <RecentVideos videos={ytVideos} />}
+
+          {/* Recent Posts — shown whenever Instagram post data exists */}
+          {igPosts && igPosts.length > 0 && <RecentPosts posts={igPosts} />}
         </>
       )}
 

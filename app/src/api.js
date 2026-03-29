@@ -112,6 +112,9 @@ export const api = {
   insightsSync:       ()         => req('/insights/sync', { method: 'POST' }),
   insightsDisconnect: (platform) => req(`/insights/connect/${platform}`, { method: 'DELETE' }),
   youtubeMetrics:     (type = 'account') => req(`/integrations/data/metrics?platform=youtube&metric_type=${type}`),
+  instagramMetrics:   (type = 'account') => req(`/integrations/data/metrics?platform=instagram&metric_type=${type}`),
+  instagramAuthStart: ()                 => req('/integrations/auth/start/instagram'),
+  integrationStatus:  ()                 => req('/integrations/status'),
 
   // Upload
   uploadFile: (file) => {
