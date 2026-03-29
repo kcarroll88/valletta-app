@@ -31,6 +31,7 @@ If no current team member has the right skills, you escalate to **Leo** (HR) and
 | Milo | Librarian — File organization & asset management | team/milo.md |
 | Rex  | Data & Tooling Developer — SQLite DB, file indexer, CLI tools | team/rex.md |
 | Jade | Frontend Developer — React/Tailwind UI for the project DB | team/jade.md |
+| Nova | Mobile UI/UX Engineer — Capacitor, PWA, native-quality mobile, App Store | team/nova.md |
 | Scout | Creative Intelligence & Idea Capture — extracts and structures ideas from sessions | team/scout.md |
 
 ### Band Team
