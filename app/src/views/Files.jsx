@@ -421,7 +421,7 @@ function Breadcrumb({ path, onNavigate }) {
 
 // ─── Icon View ────────────────────────────────────────────────────────────────
 
-function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot, tree, onFileContextMenu, onFileMobileMenu }) {
+function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot, tree, onFileContextMenu, onFileMobileMenu, onFolderContextMenu }) {
   const filteredFolders = folders.filter(f =>
     !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -465,6 +465,13 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot
           <div
             key={folder.id}
             onClick={() => onFolderClick(folder)}
+            onContextMenu={e => {
+              e.preventDefault()
+              e.stopPropagation()
+              const x = Math.min(e.clientX, window.innerWidth - 220)
+              const y = Math.min(e.clientY, window.innerHeight - 120)
+              onFolderContextMenu && onFolderContextMenu(x, y, folder)
+            }}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -648,7 +655,7 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot
 
 // ─── List View ────────────────────────────────────────────────────────────────
 
-function ListView({ folders, files, onFolderClick, searchQuery, isRoot, tree, onFileContextMenu, onFileMobileMenu }) {
+function ListView({ folders, files, onFolderClick, searchQuery, isRoot, tree, onFileContextMenu, onFileMobileMenu, onFolderContextMenu }) {
   const [sortKey, setSortKey]   = useState('name')
   const [sortDir, setSortDir]   = useState('asc')
 
@@ -748,6 +755,13 @@ function ListView({ folders, files, onFolderClick, searchQuery, isRoot, tree, on
           <div
             key={folder.id}
             onClick={() => onFolderClick(folder)}
+            onContextMenu={e => {
+              e.preventDefault()
+              e.stopPropagation()
+              const x = Math.min(e.clientX, window.innerWidth - 220)
+              const y = Math.min(e.clientY, window.innerHeight - 120)
+              onFolderContextMenu && onFolderContextMenu(x, y, folder)
+            }}
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 110px 90px 110px',
@@ -958,6 +972,142 @@ function ContextMenu({ x, y, file, onClose, onMove }) {
           onClick={() => { navigator.clipboard.writeText(file.drive_url); onClose() }}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Folder Context Menu ──────────────────────────────────────────────────────
+
+function FolderContextMenu({ x, y, folder, onClose, onMove }) {
+  useEffect(() => {
+    const handler = () => onClose()
+    window.addEventListener('mousedown', handler)
+    return () => window.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      onMouseDown={e => e.stopPropagation()}
+      style={{
+        position: 'fixed', top: y, left: x, zIndex: 2000,
+        background: 'rgba(28,28,42,0.98)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        borderRadius: 10,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        minWidth: 200, padding: '6px 0',
+        backdropFilter: 'blur(20px)',
+      }}
+    >
+      <div style={{
+        padding: '6px 14px 8px', fontSize: 11,
+        color: 'rgba(255,255,255,0.4)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        marginBottom: 4,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220,
+      }}>
+        {folder.name}
+      </div>
+      <ContextMenuItem icon="📂" label="Move to folder…" onClick={() => { onMove(folder); onClose() }} />
+    </div>
+  )
+}
+
+// ─── Folder Move Modal ────────────────────────────────────────────────────────
+
+function FolderMoveModal({ folder, tree, onMoved, onClose }) {
+  const [selected, setSelected] = useState(null)
+  const [moving, setMoving] = useState(false)
+
+  function getDescendantIds(f, targetId) {
+    const ids = new Set()
+    function walk(node) {
+      ids.add(node.id)
+      ;(node.children || []).forEach(walk)
+    }
+    const root = findFolder(f, targetId)
+    if (root) walk(root)
+    return ids
+  }
+  const excluded = getDescendantIds(tree, folder.id)
+
+  function filterTree(nodes) {
+    return nodes
+      .filter(n => !excluded.has(n.id))
+      .map(n => ({ ...n, children: filterTree(n.children || []) }))
+  }
+  const filteredTree = filterTree(tree)
+
+  const handleConfirm = async () => {
+    if (!selected) return
+    setMoving(true)
+    try {
+      const tk = localStorage.getItem('vlt_token')
+      await fetch(`/api/drive/folders/${folder.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
+        body: JSON.stringify({ parent_id: selected.id })
+      })
+      onMoved()
+      onClose()
+    } catch(e) {
+      console.error('Folder move failed:', e)
+    } finally {
+      setMoving(false)
+    }
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onMouseDown={onClose}
+    >
+      <div onMouseDown={e => e.stopPropagation()} style={{
+        background: 'rgba(22,22,36,0.99)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        borderRadius: 14, width: 340, maxHeight: '70vh',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.6)', overflow: 'hidden',
+      }}>
+        <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#fff', marginBottom: 4 }}>Move folder</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            "{folder.name}" → {selected ? selected.name : '…'}
+          </div>
+        </div>
+        {/* "Top level (no parent)" option */}
+        <div
+          onClick={() => setSelected({ id: null, name: 'Top level' })}
+          style={{
+            padding: '10px 16px',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            cursor: 'pointer',
+            background: selected?.id === null ? 'rgba(124,106,247,0.2)' : 'transparent',
+            fontSize: 13,
+            color: selected?.id === null ? '#fff' : 'rgba(255,255,255,0.6)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}
+        >
+          <span style={{ fontSize: 16 }}>🏠</span> Top level (no parent)
+          {selected?.id === null && <span style={{ marginLeft: 'auto', color: '#7c6af7', fontSize: 11 }}>✓</span>}
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+          {filteredTree.map(f => (
+            <PickerFolder key={f.id} folder={f} selected={selected} onSelect={setSelected} depth={0} />
+          ))}
+        </div>
+        <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '7px 16px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 13 }}>
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={!selected || moving}
+            style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: selected ? '#7c6af7' : 'rgba(124,106,247,0.3)', color: selected ? '#fff' : 'rgba(255,255,255,0.4)', cursor: selected ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 600 }}
+          >
+            {moving ? 'Moving…' : 'Move here'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1207,8 +1357,10 @@ export default function Files() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   // Context menu / move state
-  const [contextMenu, setContextMenu] = useState(null)  // { x, y, file }
-  const [movingFile,  setMovingFile]  = useState(null)  // file being moved
+  const [contextMenu,       setContextMenu]       = useState(null)  // { x, y, file }
+  const [movingFile,        setMovingFile]        = useState(null)  // file being moved
+  const [folderContextMenu, setFolderContextMenu] = useState(null)  // { x, y, folder }
+  const [movingFolder,      setMovingFolder]      = useState(null)  // folder being moved
 
   // ── Load tree ──────────────────────────────────────────────────────────────
 
@@ -1328,6 +1480,8 @@ export default function Files() {
   const breadcrumbPath = currentFolderId
     ? findFolderPath(tree, currentFolderId) || []
     : []
+
+  const currentFolder = currentFolderId ? findFolder(tree, currentFolderId) : null
 
   // ── Sync ──────────────────────────────────────────────────────────────────
 
@@ -1604,7 +1758,7 @@ export default function Files() {
           onMouseEnter={e => { if (!showNewFolder) e.currentTarget.style.background = 'rgba(255,255,255,0.09)' }}
           onMouseLeave={e => { if (!showNewFolder) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
         >
-          + Folder
+          + {currentFolderId ? `Folder in "${currentFolder?.name || 'here'}"` : 'New Folder'}
         </button>
 
         {/* Sync */}
@@ -1748,6 +1902,7 @@ export default function Files() {
                 tree={tree}
                 onFileContextMenu={(x, y, file) => setContextMenu({ x, y, file })}
                 onFileMobileMenu={(file) => setMovingFile(file)}
+                onFolderContextMenu={(x, y, folder) => setFolderContextMenu({ x, y, folder })}
               />
             ) : (
               <ListView
@@ -1759,6 +1914,7 @@ export default function Files() {
                 tree={tree}
                 onFileContextMenu={(x, y, file) => setContextMenu({ x, y, file })}
                 onFileMobileMenu={(file) => setMovingFile(file)}
+                onFolderContextMenu={(x, y, folder) => setFolderContextMenu({ x, y, folder })}
               />
             )}
           </div>
@@ -1872,6 +2028,39 @@ export default function Files() {
             }))
           }}
           onClose={() => setMovingFile(null)}
+        />
+      )}
+
+      {/* Folder context menu */}
+      {folderContextMenu && (
+        <FolderContextMenu
+          x={folderContextMenu.x}
+          y={folderContextMenu.y}
+          folder={folderContextMenu.folder}
+          onClose={() => setFolderContextMenu(null)}
+          onMove={(folder) => { setMovingFolder(folder); setFolderContextMenu(null) }}
+        />
+      )}
+
+      {/* Folder move modal */}
+      {movingFolder && (
+        <FolderMoveModal
+          folder={movingFolder}
+          tree={tree}
+          onMoved={() => {
+            setMovingFolder(null)
+            driveGet('/drive/tree').then(data => {
+              const folders = Array.isArray(data) ? data : (data?.folders || data?.tree || [])
+              setTree(folders)
+              if (currentFolderId) {
+                loadContents(currentFolderId)
+              } else {
+                const unorganized = Array.isArray(data) ? [] : (data?.unorganized || [])
+                setFolderContents({ folders, files: unorganized })
+              }
+            })
+          }}
+          onClose={() => setMovingFolder(null)}
         />
       )}
 
