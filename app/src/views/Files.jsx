@@ -146,63 +146,61 @@ function findFolder(tree, id) {
 function FolderIcon({ color = '#4A90D9', size = 48 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Folder tab */}
+      {/* Back of folder (slightly darker) */}
       <path
-        d="M4 14C4 12.9 4.9 12 6 12H18L22 16H42C43.1 16 44 16.9 44 18V38C44 39.1 43.1 40 42 40H6C4.9 40 4 39.1 4 38V14Z"
+        d="M4 16C4 14.9 4.9 14 6 14H20L24 18H42C43.1 18 44 18.9 44 20V38C44 39.1 43.1 40 42 40H6C4.9 40 4 39.1 4 38V16Z"
         fill={color}
-        opacity="0.9"
+        opacity="0.6"
       />
-      {/* Folder body highlight */}
-      <path
-        d="M4 18H44V38C44 39.1 43.1 40 42 40H6C4.9 40 4 39.1 4 38V18Z"
-        fill={color}
-      />
-      {/* Shine overlay */}
-      <path
-        d="M4 18H44V22H4V18Z"
-        fill="white"
-        opacity="0.15"
-      />
+      {/* Main folder body */}
+      <rect x="4" y="20" width="40" height="20" rx="2" fill={color}/>
+      {/* Top shine */}
+      <rect x="4" y="20" width="40" height="5" rx="2" fill="white" opacity="0.12"/>
     </svg>
   )
 }
 
 function FileIcon({ mimeType = '', size = 48 }) {
   const { color, label } = fileIconMap(mimeType)
+  const labelSize = Math.max(8, Math.round(size * 0.18))
 
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Document body */}
-      <path
-        d="M10 6C10 4.9 10.9 4 12 4H30L38 12V42C38 43.1 37.1 44 36 44H12C10.9 44 10 43.1 10 42V6Z"
-        fill="rgba(255,255,255,0.08)"
-        stroke="rgba(255,255,255,0.15)"
-        strokeWidth="1"
-      />
-      {/* Folded corner */}
-      <path
-        d="M30 4L38 12H32C30.9 12 30 11.1 30 10V4Z"
-        fill={color}
-        opacity="0.7"
-      />
-      {/* Type label bar */}
-      <rect x="10" y="28" width="28" height="10" rx="2" fill={color} opacity="0.85" />
-      {/* Type text */}
-      <text
-        x="24"
-        y="36"
-        textAnchor="middle"
-        fill="white"
-        fontSize="7"
-        fontFamily="system-ui, sans-serif"
-        fontWeight="600"
-      >
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Document body */}
+        <rect x="6" y="4" width="30" height="38" rx="3" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
+        {/* Folded corner — white triangle cutout */}
+        <path d="M28 4 L36 12 L28 12 Z" fill="rgba(18,18,30,0.9)"/>
+        <path d="M28 4 L36 12" stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
+        {/* Color band at bottom */}
+        <rect x="6" y="30" width="30" height="12" rx="0" fill={color} opacity="0.9"/>
+        <rect x="6" y="39" width="30" height="3" rx="0" style={{fill: color}}/>
+        {/* Bottom corners rounding fix */}
+        <rect x="6" y="39" width="30" height="3" rx="3" fill={color} opacity="0.9"/>
+        {/* Subtle content lines */}
+        <line x1="11" y1="18" x2="31" y2="18" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="11" y1="23" x2="25" y2="23" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="11" y1="28" x2="28" y2="28" stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+      {/* Type label rendered as HTML — always crisp */}
+      <div style={{
+        position: 'absolute',
+        bottom: Math.round(size * 0.08),
+        left: 0,
+        right: 0,
+        textAlign: 'center',
+        fontSize: labelSize,
+        fontWeight: 700,
+        color: '#fff',
+        letterSpacing: '0.04em',
+        lineHeight: 1,
+        pointerEvents: 'none',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+      }}>
         {label}
-      </text>
-      {/* Content lines */}
-      <line x1="14" y1="20" x2="34" y2="20" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round"/>
-      <line x1="14" y1="24" x2="28" y2="24" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
+      </div>
+    </div>
   )
 }
 
