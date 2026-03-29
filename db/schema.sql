@@ -345,16 +345,17 @@ CREATE INDEX IF NOT EXISTS idx_drive_files_folder ON drive_files(folder_id);
 CREATE INDEX IF NOT EXISTS idx_drive_files_drive_id ON drive_files(drive_id);
 CREATE INDEX IF NOT EXISTS idx_drive_folders_parent ON drive_folders(parent_id);
 
--- Seed initial folder structure (safe to re-run due to OR IGNORE)
+-- Seed: top-level folders (safe to re-run)
 INSERT OR IGNORE INTO drive_folders (id, name, parent_id, sort_order) VALUES
-(1, 'Contracts & Legal',    NULL, 1),
-(2, 'Press & EPK',          NULL, 2),
-(3, 'Music & Recordings',   NULL, 3),
-(4, 'Finance',              NULL, 4),
-(5, 'Tour & Shows',         NULL, 5),
-(6, 'Art & Design',         NULL, 6),
-(7, 'Band Admin',           NULL, 7),
-(8, 'Uncategorized',        NULL, 99);
+  (1, 'Art & Design', NULL, 1),
+  (2, 'Music',        NULL, 2),
+  (3, 'Photos',       NULL, 3),
+  (4, 'Merch',        NULL, 4),
+  (5, 'Press & EPK',  NULL, 5),
+  (6, 'Videos',       NULL, 6),
+  (7, 'Social Media', NULL, 7),
+  (8, 'Touring',      NULL, 8),
+  (9, 'Business',     NULL, 9);
 
 -- ─────────────────────────────────────────
 -- FINANCE

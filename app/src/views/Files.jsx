@@ -1,155 +1,184 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from '../api'
 import useIsMobile from '../hooks/useIsMobile'
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── API Helpers ─────────────────────────────────────────────────────────────
+
+const token = () => localStorage.getItem('vlt_token')
+const driveGet  = (path) =>
+  fetch('/api' + path, { headers: { Authorization: `Bearer ${token()}` } }).then(r => r.json())
+const drivePost = (path, body) =>
+  fetch('/api' + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+    body: JSON.stringify(body),
+  }).then(r => r.json())
+const drivePatch = (path, body) =>
+  fetch('/api' + path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+    body: JSON.stringify(body),
+  }).then(r => r.json())
+
+// ─── Folder Meta Map ─────────────────────────────────────────────────────────
+
+const FOLDER_META = {
+  'Art & Design':             { icon: '🎨', color: '#7C3AED' },
+  'Music':                    { icon: '🎵', color: '#2563EB' },
+  'Photos':                   { icon: '📸', color: '#059669' },
+  'Merch':                    { icon: '👕', color: '#D97706' },
+  'Press & EPK':              { icon: '📰', color: '#0891B2' },
+  'Videos':                   { icon: '🎞️', color: '#DC2626' },
+  'Social Media':             { icon: '📣', color: '#7C3AED' },
+  'Touring':                  { icon: '🚐', color: '#64748B' },
+  'Business':                 { icon: '💼', color: '#374151' },
+  'Logos':                    { icon: '✏️', color: '#8B5CF6' },
+  'Flyers & Posters':         { icon: '📄', color: '#8B5CF6' },
+  'Album & Single Art':       { icon: '🖼️', color: '#8B5CF6' },
+  'Banners & Headers':        { icon: '🏳️', color: '#8B5CF6' },
+  'Releases':                 { icon: '💿', color: '#3B82F6' },
+  'Singles':                  { icon: '🎶', color: '#60A5FA' },
+  'EPs & Albums':             { icon: '📀', color: '#60A5FA' },
+  'Demos & Ideas':            { icon: '💡', color: '#3B82F6' },
+  'Stems & Sessions':         { icon: '🎛️', color: '#3B82F6' },
+  'Live Recordings':          { icon: '🎤', color: '#3B82F6' },
+  'Press Photos':             { icon: '🗞️', color: '#10B981' },
+  'Live Shows':               { icon: '🎸', color: '#10B981' },
+  'Behind the Scenes':        { icon: '🎬', color: '#10B981' },
+  'Headshots':                { icon: '👤', color: '#10B981' },
+  'Designs':                  { icon: '✏️', color: '#F59E0B' },
+  'Product Photos':           { icon: '📦', color: '#F59E0B' },
+  'Mockups':                  { icon: '🪞', color: '#F59E0B' },
+  'Press Releases':           { icon: '📝', color: '#06B6D4' },
+  'EPK Materials':            { icon: '📂', color: '#06B6D4' },
+  'Articles & Features':      { icon: '✂️', color: '#06B6D4' },
+  'Radio & Podcasts':         { icon: '📻', color: '#06B6D4' },
+  'Music Videos':             { icon: '🎥', color: '#EF4444' },
+  'Live Performances':        { icon: '🎭', color: '#EF4444' },
+  'Short Clips & Reels':      { icon: '📱', color: '#EF4444' },
+  'Content Calendar Assets':  { icon: '🗓️', color: '#8B5CF6' },
+  'Graphics & Templates':     { icon: '🖼️', color: '#8B5CF6' },
+  'Captions & Copy':          { icon: '💬', color: '#8B5CF6' },
+  'Itineraries':              { icon: '🗺️', color: '#94A3B8' },
+  'Stage Plots & Riders':     { icon: '🎚️', color: '#94A3B8' },
+  'Venue Contacts':           { icon: '📍', color: '#94A3B8' },
+  'Contracts':                { icon: '📋', color: '#6B7280' },
+  'Finances':                 { icon: '💰', color: '#6B7280' },
+  'Band Agreements':          { icon: '🤝', color: '#6B7280' },
+  'Sync & Licensing':         { icon: '🎬', color: '#6B7280' },
+}
+const folderMeta = (name) => FOLDER_META[name] || { icon: '📁', color: '#6B7280' }
+
+// ─── File Icon Map ────────────────────────────────────────────────────────────
+
+const fileIconMap = (mimeType) => {
+  if (!mimeType) return { icon: '📄', color: '#6B7280' }
+  if (mimeType.includes('image'))        return { icon: '🖼️', color: '#10B981' }
+  if (mimeType.includes('video'))        return { icon: '🎬', color: '#EF4444' }
+  if (mimeType.includes('audio'))        return { icon: '🎵', color: '#3B82F6' }
+  if (mimeType.includes('pdf'))          return { icon: '📋', color: '#F59E0B' }
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel'))
+                                         return { icon: '📊', color: '#059669' }
+  if (mimeType.includes('document') || mimeType.includes('word'))
+                                         return { icon: '📝', color: '#2563EB' }
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint'))
+                                         return { icon: '📊', color: '#DC2626' }
+  if (mimeType.includes('zip') || mimeType.includes('archive'))
+                                         return { icon: '📦', color: '#64748B' }
+  if (mimeType.includes('folder'))       return { icon: '📁', color: '#6B7280' }
+  return { icon: '📄', color: '#6B7280' }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtSize(bytes) {
+  if (!bytes) return '—'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+}
 
 function fmtDate(iso) {
   if (!iso) return '—'
   try {
     const d = new Date(iso.replace('T', ' ').slice(0, 10))
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   } catch {
     return iso.slice(0, 10)
   }
 }
 
-// Map mime_type → { label, color }
-function mimeInfo(mimeType) {
-  if (!mimeType) return { label: 'FILE', color: '#9595b8' }
-  if (mimeType.includes('pdf'))                                   return { label: 'PDF',  color: '#f87171' }
-  if (mimeType.includes('document') || mimeType.includes('word')) return { label: 'DOC',  color: '#60a5fa' }
-  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return { label: 'XLS', color: '#4ade80' }
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return { label: 'PPT', color: '#fb923c' }
-  if (mimeType.startsWith('image/'))                              return { label: 'IMG',  color: '#a78bfa' }
-  if (mimeType.startsWith('video/'))                              return { label: 'VID',  color: '#38bdf8' }
-  if (mimeType.startsWith('audio/'))                              return { label: 'AUD',  color: '#a89fff' }
-  return { label: 'FILE', color: '#9595b8' }
+function mimeLabel(mimeType) {
+  if (!mimeType) return 'File'
+  if (mimeType.includes('image'))        return 'Image'
+  if (mimeType.includes('video'))        return 'Video'
+  if (mimeType.includes('audio'))        return 'Audio'
+  if (mimeType.includes('pdf'))          return 'PDF'
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return 'Spreadsheet'
+  if (mimeType.includes('document') || mimeType.includes('word'))     return 'Document'
+  if (mimeType.includes('presentation')) return 'Presentation'
+  if (mimeType.includes('zip') || mimeType.includes('archive'))       return 'Archive'
+  return 'File'
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
+// Walk tree to find folder by id, returns array of ancestor folders (path)
+function findFolderPath(tree, targetId, path = []) {
+  for (const folder of tree) {
+    const newPath = [...path, folder]
+    if (folder.id === targetId) return newPath
+    if (folder.children && folder.children.length > 0) {
+      const found = findFolderPath(folder.children, targetId, newPath)
+      if (found) return found
+    }
+  }
+  return null
+}
 
-function FileBadge({ mimeType }) {
-  const { label, color } = mimeInfo(mimeType)
+// Find folder object by id anywhere in tree
+function findFolder(tree, id) {
+  for (const folder of tree) {
+    if (folder.id === id) return folder
+    if (folder.children && folder.children.length > 0) {
+      const found = findFolder(folder.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+// ─── Spinner ──────────────────────────────────────────────────────────────────
+
+function Spinner({ size = 14 }) {
   return (
     <span style={{
-      background: `${color}22`,
-      border: `1px solid ${color}44`,
-      color,
-      fontSize: 9,
-      fontWeight: 700,
-      padding: '2px 5px',
-      borderRadius: 4,
-      letterSpacing: '0.06em',
-      textTransform: 'uppercase',
+      display: 'inline-block',
+      width: size,
+      height: size,
+      border: `2px solid rgba(255,255,255,0.15)`,
+      borderTopColor: '#a89fff',
+      borderRadius: '50%',
+      animation: 'spin 0.7s linear infinite',
       flexShrink: 0,
-      minWidth: 34,
-      textAlign: 'center',
-    }}>
-      {label}
-    </span>
+    }} />
   )
 }
 
-function FolderRow({ folder, depth, isActive, isExpanded, onSelect, onToggle }) {
-  const hasChildren = folder.children && folder.children.length > 0
-  const indent = depth * 14
+// ─── Sidebar Tree ─────────────────────────────────────────────────────────────
 
-  return (
-    <>
-      <div
-        onClick={() => onSelect(folder)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: `6px 12px 6px ${12 + indent}px`,
-          cursor: 'pointer',
-          borderRadius: 6,
-          margin: '1px 6px',
-          background: isActive ? 'rgba(124,106,247,0.15)' : 'transparent',
-          borderLeft: isActive ? '2px solid #a89fff' : '2px solid transparent',
-          transition: 'background 0.12s',
-          userSelect: 'none',
-        }}
-        onMouseEnter={e => {
-          if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-        }}
-        onMouseLeave={e => {
-          if (!isActive) e.currentTarget.style.background = 'transparent'
-        }}
-      >
-        {/* Expand/collapse arrow or spacer */}
-        <span
-          onClick={e => { e.stopPropagation(); if (hasChildren) onToggle(folder.id) }}
-          style={{
-            fontSize: 9,
-            color: hasChildren ? 'rgba(255,255,255,0.4)' : 'transparent',
-            width: 12,
-            flexShrink: 0,
-            cursor: hasChildren ? 'pointer' : 'default',
-            transition: 'transform 0.15s',
-            display: 'inline-block',
-            transform: hasChildren && isExpanded ? 'rotate(90deg)' : 'none',
-          }}
-        >
-          ▶
-        </span>
-
-        <span style={{
-          fontSize: 12,
-          color: isActive ? '#c4baff' : 'rgba(255,255,255,0.75)',
-          fontWeight: isActive ? 500 : 400,
-          flex: 1,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
-          {folder.name}
-        </span>
-
-        {folder.file_count != null && (
-          <span style={{
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.25)',
-            flexShrink: 0,
-          }}>
-            {folder.file_count}
-          </span>
-        )}
-      </div>
-
-      {/* Recurse into children if expanded */}
-      {hasChildren && isExpanded && folder.children.map(child => (
-        <FolderRow
-          key={child.id}
-          folder={child}
-          depth={depth + 1}
-          isActive={isActive && false /* parent handles active */}
-          isExpanded={false}
-          onSelect={onSelect}
-          onToggle={onToggle}
-        />
-      ))}
-    </>
-  )
-}
-
-function FolderTree({ tree, activeFolderId, onSelect }) {
+function SidebarTree({ tree, activeFolderId, onSelect }) {
   const [expanded, setExpanded] = useState({})
 
   const toggleExpand = useCallback((id) => {
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }))
   }, [])
 
-  // Separate "Uncategorized" from the rest
-  const mainFolders = tree.filter(f => !f.uncategorized)
-  const uncategorized = tree.find(f => f.uncategorized)
-
   const renderFolder = (folder, depth = 0) => {
     const hasChildren = folder.children && folder.children.length > 0
     const isExp = !!expanded[folder.id]
     const isActive = activeFolderId === folder.id
+    const meta = folderMeta(folder.name)
+    const indent = depth * 8
 
     return (
       <div key={folder.id}>
@@ -159,28 +188,25 @@ function FolderTree({ tree, activeFolderId, onSelect }) {
             display: 'flex',
             alignItems: 'center',
             gap: 6,
-            padding: `6px 12px 6px ${12 + depth * 14}px`,
+            padding: `0 10px 0 ${10 + indent}px`,
+            height: 32,
             cursor: 'pointer',
-            borderRadius: 6,
-            margin: '1px 6px',
-            background: isActive ? 'rgba(124,106,247,0.15)' : 'transparent',
+            background: isActive ? 'rgba(124,106,247,0.2)' : 'transparent',
             borderLeft: isActive ? '2px solid #a89fff' : '2px solid transparent',
-            transition: 'background 0.12s',
+            transition: 'background 0.1s',
             userSelect: 'none',
+            boxSizing: 'border-box',
           }}
-          onMouseEnter={e => {
-            if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-          }}
-          onMouseLeave={e => {
-            if (!isActive) e.currentTarget.style.background = 'transparent'
-          }}
+          onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+          onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
         >
+          {/* Expand arrow */}
           <span
             onClick={e => { e.stopPropagation(); if (hasChildren) toggleExpand(folder.id) }}
             style={{
-              fontSize: 9,
-              color: hasChildren ? 'rgba(255,255,255,0.4)' : 'transparent',
-              width: 12,
+              fontSize: 8,
+              color: hasChildren ? 'rgba(255,255,255,0.35)' : 'transparent',
+              width: 10,
               flexShrink: 0,
               cursor: hasChildren ? 'pointer' : 'default',
               display: 'inline-block',
@@ -191,9 +217,25 @@ function FolderTree({ tree, activeFolderId, onSelect }) {
             ▶
           </span>
 
+          {/* Folder icon */}
+          <span style={{
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            background: meta.color + '33',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+            flexShrink: 0,
+          }}>
+            {meta.icon}
+          </span>
+
+          {/* Name */}
           <span style={{
             fontSize: 12,
-            color: isActive ? '#c4baff' : 'rgba(255,255,255,0.75)',
+            color: isActive ? '#c4baff' : 'rgba(255,255,255,0.72)',
             fontWeight: isActive ? 500 : 400,
             flex: 1,
             overflow: 'hidden',
@@ -203,8 +245,16 @@ function FolderTree({ tree, activeFolderId, onSelect }) {
             {folder.name}
           </span>
 
-          {folder.file_count != null && (
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', flexShrink: 0 }}>
+          {/* File count badge */}
+          {folder.file_count != null && folder.file_count > 0 && (
+            <span style={{
+              fontSize: 10,
+              color: 'rgba(255,255,255,0.22)',
+              flexShrink: 0,
+              background: 'rgba(255,255,255,0.06)',
+              borderRadius: 8,
+              padding: '1px 5px',
+            }}>
               {folder.file_count}
             </span>
           )}
@@ -216,434 +266,1142 @@ function FolderTree({ tree, activeFolderId, onSelect }) {
   }
 
   return (
-    <div style={{ paddingTop: 8, paddingBottom: 8 }}>
-      {/* Section label */}
+    <div style={{ paddingTop: 6, paddingBottom: 12 }}>
       <div style={{
         fontSize: 10,
         fontWeight: 700,
         color: 'rgba(255,255,255,0.2)',
         letterSpacing: '0.1em',
-        padding: '0 18px',
-        marginBottom: 6,
-        marginTop: 4,
+        padding: '0 12px',
+        marginBottom: 4,
+        marginTop: 8,
       }}>
-        FOLDERS
+        FILES
       </div>
-
-      {mainFolders.map(folder => renderFolder(folder))}
-
-      {/* Uncategorized divider + row */}
-      {uncategorized && (
-        <>
-          <div style={{
-            height: 1,
-            background: 'rgba(255,255,255,0.07)',
-            margin: '10px 12px',
-          }} />
-          {renderFolder(uncategorized)}
-        </>
-      )}
+      {tree.map(folder => renderFolder(folder))}
     </div>
   )
 }
 
-function FileList({ files, folderName, loading }) {
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
-        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading…</div>
-      </div>
-    )
-  }
+// ─── Breadcrumb ───────────────────────────────────────────────────────────────
 
-  if (files.length === 0) {
+function Breadcrumb({ path, onNavigate }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, minWidth: 0 }}>
+      <span
+        onClick={() => onNavigate(null)}
+        style={{
+          color: path && path.length > 0 ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.75)',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          fontWeight: path && path.length > 0 ? 400 : 500,
+        }}
+        onMouseEnter={e => { if (path && path.length > 0) e.currentTarget.style.color = 'rgba(255,255,255,0.65)' }}
+        onMouseLeave={e => { if (path && path.length > 0) e.currentTarget.style.color = 'rgba(255,255,255,0.4)' }}
+      >
+        Files
+      </span>
+      {path && path.map((folder, i) => {
+        const isLast = i === path.length - 1
+        return (
+          <span key={folder.id} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11 }}>›</span>
+            <span
+              onClick={() => !isLast && onNavigate(folder.id)}
+              style={{
+                color: isLast ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)',
+                cursor: isLast ? 'default' : 'pointer',
+                fontWeight: isLast ? 500 : 400,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: 140,
+              }}
+              onMouseEnter={e => { if (!isLast) e.currentTarget.style.color = 'rgba(255,255,255,0.65)' }}
+              onMouseLeave={e => { if (!isLast) e.currentTarget.style.color = 'rgba(255,255,255,0.4)' }}
+            >
+              {folder.name}
+            </span>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Icon View ────────────────────────────────────────────────────────────────
+
+function IconView({ folders, files, onFolderClick, isMobile, searchQuery }) {
+  const filteredFolders = folders.filter(f =>
+    !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+  const filteredFiles = files.filter(f =>
+    !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const minSize = isMobile ? 90 : 120
+
+  if (filteredFolders.length === 0 && filteredFiles.length === 0) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, gap: 8 }}>
-        <div style={{ fontSize: 28, opacity: 0.15 }}>◫</div>
-        <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>No files in this folder</div>
-        <div style={{ color: 'rgba(255,255,255,0.15)', fontSize: 12 }}>This folder appears to be empty</div>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 280,
+        gap: 10,
+      }}>
+        <div style={{ fontSize: 36, opacity: 0.12 }}>📂</div>
+        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>
+          {searchQuery ? 'No results for "' + searchQuery + '"' : 'This folder is empty'}
+        </div>
       </div>
     )
   }
 
   return (
-    <div>
-      {files.map((file, idx) => (
-        <div
-          key={file.id || idx}
-          onClick={() => file.drive_url && window.open(file.drive_url, '_blank')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '9px 14px',
-            borderRadius: 6,
-            cursor: file.drive_url ? 'pointer' : 'default',
-            transition: 'background 0.1s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-        >
-          <FileBadge mimeType={file.mime_type} />
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: `repeat(auto-fill, minmax(${minSize}px, 1fr))`,
+      gap: 16,
+      padding: 24,
+    }}>
+      {filteredFolders.map(folder => {
+        const meta = folderMeta(folder.name)
+        return (
+          <div
+            key={folder.id}
+            onClick={() => onFolderClick(folder)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 8,
+              padding: '14px 8px 12px',
+              borderRadius: 10,
+              cursor: 'pointer',
+              transition: 'transform 0.12s, background 0.12s',
+              userSelect: 'none',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'scale(1.05)'
+              e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.background = 'transparent'
+            }}
+          >
+            <div style={{
+              width: 80,
+              height: 80,
+              borderRadius: 20,
+              background: meta.color + '33',
+              border: `1px solid ${meta.color}55`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 32,
+              flexShrink: 0,
+            }}>
+              {meta.icon}
+            </div>
+            <div style={{
+              fontSize: 12,
+              color: 'rgba(255,255,255,0.82)',
+              textAlign: 'center',
+              lineHeight: 1.35,
+              wordBreak: 'break-word',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              width: '100%',
+            }}>
+              {folder.name}
+            </div>
+            {folder.file_count != null && (
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>
+                {folder.file_count} {folder.file_count === 1 ? 'file' : 'files'}
+              </div>
+            )}
+          </div>
+        )
+      })}
 
-          <span style={{
-            flex: 1,
-            fontSize: 13,
-            color: 'rgba(255,255,255,0.75)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}>
-            {file.name}
-          </span>
-
-          <span style={{
-            fontSize: 11,
-            color: 'rgba(255,255,255,0.25)',
-            flexShrink: 0,
-            minWidth: 52,
-            textAlign: 'right',
-          }}>
-            {fmtDate(file.modified_at)}
-          </span>
-        </div>
-      ))}
+      {filteredFiles.map((file, idx) => {
+        const { icon, color } = fileIconMap(file.mime_type)
+        const hasThumb = !!file.thumbnail_url
+        return (
+          <div
+            key={file.id || idx}
+            onClick={() => file.drive_url && window.open(file.drive_url, '_blank')}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 8,
+              padding: '14px 8px 12px',
+              borderRadius: 10,
+              cursor: file.drive_url ? 'pointer' : 'default',
+              transition: 'transform 0.12s, background 0.12s',
+              userSelect: 'none',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'scale(1.05)'
+              e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.background = 'transparent'
+            }}
+          >
+            <div style={{
+              width: 80,
+              height: 80,
+              borderRadius: 12,
+              background: hasThumb ? 'transparent' : color + '22',
+              border: hasThumb ? 'none' : `1px solid ${color}44`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: hasThumb ? 0 : 32,
+              flexShrink: 0,
+              overflow: 'hidden',
+            }}>
+              {hasThumb ? (
+                <img
+                  src={file.thumbnail_url}
+                  alt={file.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }}
+                  onError={e => {
+                    e.currentTarget.style.display = 'none'
+                    e.currentTarget.parentElement.style.fontSize = '32px'
+                    e.currentTarget.parentElement.textContent = icon
+                  }}
+                />
+              ) : (
+                icon
+              )}
+            </div>
+            <div style={{
+              fontSize: 11,
+              color: 'rgba(255,255,255,0.65)',
+              textAlign: 'center',
+              lineHeight: 1.35,
+              wordBreak: 'break-word',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              width: '100%',
+            }}>
+              {file.name}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-// ─── Main Component ──────────────────────────────────────────────────────────
+// ─── List View ────────────────────────────────────────────────────────────────
+
+function ListView({ folders, files, onFolderClick, searchQuery }) {
+  const [sortKey, setSortKey]   = useState('name')
+  const [sortDir, setSortDir]   = useState('asc')
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const arrow = (key) => {
+    if (sortKey !== key) return <span style={{ color: 'rgba(255,255,255,0.15)', marginLeft: 4 }}>↕</span>
+    return <span style={{ color: '#a89fff', marginLeft: 4 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
+
+  const filteredFolders = folders.filter(f =>
+    !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+  const filteredFiles = files.filter(f =>
+    !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const sortedFiles = [...filteredFiles].sort((a, b) => {
+    let va, vb
+    if (sortKey === 'name')     { va = a.name || ''; vb = b.name || '' }
+    if (sortKey === 'type')     { va = a.mime_type || ''; vb = b.mime_type || '' }
+    if (sortKey === 'size')     { va = a.size_bytes || 0; vb = b.size_bytes || 0 }
+    if (sortKey === 'modified') { va = a.modified_at || ''; vb = b.modified_at || '' }
+    if (typeof va === 'string') {
+      const c = va.localeCompare(vb)
+      return sortDir === 'asc' ? c : -c
+    }
+    return sortDir === 'asc' ? va - vb : vb - va
+  })
+
+  const colStyle = {
+    padding: '0 14px',
+    fontSize: 11,
+    fontWeight: 600,
+    color: 'rgba(255,255,255,0.3)',
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    userSelect: 'none',
+    whiteSpace: 'nowrap',
+  }
+
+  if (filteredFolders.length === 0 && filteredFiles.length === 0) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 280,
+        gap: 10,
+      }}>
+        <div style={{ fontSize: 36, opacity: 0.12 }}>📂</div>
+        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>
+          {searchQuery ? 'No results for "' + searchQuery + '"' : 'This folder is empty'}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ width: '100%' }}>
+      {/* Header row */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 110px 90px 110px',
+        height: 36,
+        alignItems: 'center',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        position: 'sticky',
+        top: 0,
+        background: 'rgba(18,18,30,0.95)',
+        backdropFilter: 'blur(8px)',
+        zIndex: 2,
+      }}>
+        <span style={colStyle} onClick={() => handleSort('name')}>Name {arrow('name')}</span>
+        <span style={colStyle} onClick={() => handleSort('type')}>Type {arrow('type')}</span>
+        <span style={{ ...colStyle, textAlign: 'right' }} onClick={() => handleSort('size')}>Size {arrow('size')}</span>
+        <span style={{ ...colStyle, textAlign: 'right' }} onClick={() => handleSort('modified')}>Modified {arrow('modified')}</span>
+      </div>
+
+      {/* Folder rows */}
+      {filteredFolders.map(folder => {
+        const meta = folderMeta(folder.name)
+        return (
+          <div
+            key={folder.id}
+            onClick={() => onFolderClick(folder)}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 110px 90px 110px',
+              height: 36,
+              alignItems: 'center',
+              cursor: 'pointer',
+              borderLeft: `2px solid ${meta.color}`,
+              transition: 'background 0.1s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', minWidth: 0 }}>
+              <span style={{ fontSize: 14, flexShrink: 0 }}>{meta.icon}</span>
+              <span style={{
+                fontSize: 13,
+                color: 'rgba(255,255,255,0.82)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {folder.name}
+              </span>
+            </div>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', padding: '0 14px' }}>Folder</span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'right', padding: '0 14px' }}>
+              {folder.file_count != null ? folder.file_count + ' items' : '—'}
+            </span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'right', padding: '0 14px' }}>—</span>
+          </div>
+        )
+      })}
+
+      {/* File rows */}
+      {sortedFiles.map((file, idx) => {
+        const { icon, color } = fileIconMap(file.mime_type)
+        return (
+          <div
+            key={file.id || idx}
+            onClick={() => file.drive_url && window.open(file.drive_url, '_blank')}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 110px 90px 110px',
+              height: 36,
+              alignItems: 'center',
+              cursor: file.drive_url ? 'pointer' : 'default',
+              borderLeft: '2px solid transparent',
+              transition: 'background 0.1s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', minWidth: 0 }}>
+              <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+              <span style={{
+                fontSize: 13,
+                color: 'rgba(255,255,255,0.75)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {file.name}
+              </span>
+            </div>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', padding: '0 14px' }}>
+              {mimeLabel(file.mime_type)}
+            </span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'right', padding: '0 14px' }}>
+              {fmtSize(file.size_bytes)}
+            </span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'right', padding: '0 14px' }}>
+              {fmtDate(file.modified_at)}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── New Folder Input ─────────────────────────────────────────────────────────
+
+function NewFolderInput({ onSubmit, onCancel }) {
+  const [name, setName] = useState('')
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const handleKey = (e) => {
+    if (e.key === 'Enter' && name.trim()) onSubmit(name.trim())
+    if (e.key === 'Escape') onCancel()
+  }
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '12px 24px',
+      borderBottom: '1px solid rgba(255,255,255,0.06)',
+      background: 'rgba(124,106,247,0.06)',
+    }}>
+      <span style={{ fontSize: 18 }}>📁</span>
+      <input
+        ref={inputRef}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={handleKey}
+        placeholder="Folder name"
+        style={{
+          background: 'rgba(255,255,255,0.07)',
+          border: '1px solid rgba(124,106,247,0.5)',
+          borderRadius: 6,
+          color: 'rgba(255,255,255,0.9)',
+          fontSize: 13,
+          padding: '6px 10px',
+          outline: 'none',
+          width: 200,
+        }}
+      />
+      <button
+        onClick={() => name.trim() && onSubmit(name.trim())}
+        style={{
+          background: 'rgba(124,106,247,0.25)',
+          border: '1px solid rgba(124,106,247,0.5)',
+          borderRadius: 6,
+          color: '#c4baff',
+          fontSize: 12,
+          fontWeight: 500,
+          padding: '6px 12px',
+          cursor: 'pointer',
+        }}
+      >
+        Create
+      </button>
+      <button
+        onClick={onCancel}
+        style={{
+          background: 'transparent',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: 6,
+          color: 'rgba(255,255,255,0.4)',
+          fontSize: 12,
+          padding: '6px 10px',
+          cursor: 'pointer',
+        }}
+      >
+        Cancel
+      </button>
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Files() {
   const isMobile = useIsMobile()
+
+  // Tree / data state
   const [tree,           setTree]           = useState([])
   const [treeLoading,    setTreeLoading]    = useState(true)
-  const [treeError,      setTreeError]      = useState(null)
   const [driveConnected, setDriveConnected] = useState(true)
+  const [currentFolderId, setCurrentFolderId] = useState(null)   // null = root
+  const [folderContents, setFolderContents] = useState({ folders: [], files: [] })
+  const [contentsLoading, setContentsLoading] = useState(false)
 
-  const [activeFolder,   setActiveFolder]   = useState(null)   // folder object
-  const [folderFiles,    setFolderFiles]    = useState([])
-  const [filesLoading,   setFilesLoading]   = useState(false)
+  // Navigation history
+  const [history, setHistory] = useState([null])   // stack of folder IDs
+  const [historyIdx, setHistoryIdx] = useState(0)
 
-  const [syncing,        setSyncing]        = useState(false)
-  const [syncMsg,        setSyncMsg]        = useState('')
-  const [mobileFolderOpen, setMobileFolderOpen] = useState(false)
+  // UI state
+  const [viewMode,        setViewMode]        = useState('icon')  // 'icon' | 'list'
+  const [syncing,         setSyncing]         = useState(false)
+  const [search,          setSearch]          = useState('')
+  const [showNewFolder,   setShowNewFolder]   = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
-  // Load drive tree on mount
-  useEffect(() => {
+  // ── Load tree ──────────────────────────────────────────────────────────────
+
+  const loadTree = useCallback(() => {
     setTreeLoading(true)
-    api.driveTree()
+    driveGet('/drive/tree')
       .then(data => {
-        // API may return { tree: [...] } or a raw array
-        const folders = Array.isArray(data) ? data : (data?.tree || data?.folders || [])
+        const folders = Array.isArray(data) ? data : (data?.folders || data?.tree || [])
         setTree(folders)
         setDriveConnected(true)
-
-        // Auto-select first folder if present
-        if (folders.length > 0) {
-          setActiveFolder(folders[0])
-        }
       })
       .catch(err => {
-        const msg = err?.message || ''
-        // 404 = endpoints not built yet, treat as "no data" not an error
-        if (msg.includes('404') || msg.includes('500')) {
-          setTree([])
-          setDriveConnected(true) // assume connected, just no data
-        } else if (msg.includes('401') || msg.includes('403')) {
+        const msg = String(err?.message || '')
+        if (msg.includes('401') || msg.includes('403')) {
           setDriveConnected(false)
         } else {
           setTree([])
           setDriveConnected(true)
         }
-        setTreeError(null) // graceful empty state, not crash
       })
       .finally(() => setTreeLoading(false))
   }, [])
 
-  // Load files when active folder changes
-  useEffect(() => {
-    if (!activeFolder) {
-      setFolderFiles([])
-      return
-    }
-    setFilesLoading(true)
-    api.driveFolderFiles(activeFolder.id)
+  useEffect(() => { loadTree() }, [loadTree])
+
+  // ── Load folder contents ───────────────────────────────────────────────────
+
+  const loadContents = useCallback((folderId) => {
+    setContentsLoading(true)
+    const path = folderId ? `/drive/files?folder_id=${folderId}` : '/drive/files'
+    driveGet(path)
       .then(data => {
-        const items = Array.isArray(data) ? data : (data?.files || data?.items || [])
-        setFolderFiles(items)
+        // API returns array of files, or { folders, files }
+        if (Array.isArray(data)) {
+          setFolderContents({ folders: [], files: data })
+        } else {
+          setFolderContents({
+            folders: data?.folders || [],
+            files:   data?.files   || [],
+          })
+        }
       })
-      .catch(() => setFolderFiles([]))
-      .finally(() => setFilesLoading(false))
-  }, [activeFolder])
+      .catch(() => setFolderContents({ folders: [], files: [] }))
+      .finally(() => setContentsLoading(false))
+  }, [])
 
-  const handleSyncDrive = () => {
-    setSyncing(true)
-    setSyncMsg('')
-    api.syncDrive()
-      .then(() => {
-        setSyncMsg('Sync complete')
-        // Reload tree
-        return api.driveTree().then(data => {
-          const folders = Array.isArray(data) ? data : (data?.tree || data?.folders || [])
-          setTree(folders)
+  // When tree loads and we're at root, show top-level folders in content area
+  useEffect(() => {
+    if (!treeLoading && currentFolderId === null) {
+      // Show tree root folders as "folders" and any unorganized files
+      driveGet('/drive/tree')
+        .then(data => {
+          const topFolders = Array.isArray(data) ? data : (data?.folders || data?.tree || [])
+          const unorganized = Array.isArray(data) ? [] : (data?.unorganized || [])
+          setFolderContents({ folders: topFolders, files: unorganized })
         })
-      })
-      .catch(() => setSyncMsg('Sync failed — check Drive connection'))
-      .finally(() => {
-        setSyncing(false)
-        setTimeout(() => setSyncMsg(''), 4000)
-      })
+        .catch(() => {})
+        .finally(() => setContentsLoading(false))
+    }
+  }, [treeLoading, currentFolderId])
+
+  useEffect(() => {
+    if (currentFolderId !== null) {
+      loadContents(currentFolderId)
+    }
+  }, [currentFolderId, loadContents])
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
+
+  const navigateTo = useCallback((folderId) => {
+    setCurrentFolderId(folderId)
+    setSearch('')
+    setShowNewFolder(false)
+    setHistory(prev => {
+      const newHistory = [...prev.slice(0, historyIdx + 1), folderId]
+      setHistoryIdx(newHistory.length - 1)
+      return newHistory
+    })
+  }, [historyIdx])
+
+  const goBack = () => {
+    if (historyIdx > 0) {
+      const newIdx = historyIdx - 1
+      setHistoryIdx(newIdx)
+      setCurrentFolderId(history[newIdx])
+      setSearch('')
+      setShowNewFolder(false)
+    }
   }
 
-  const handleSelectFolder = (folder) => {
-    setActiveFolder(folder)
+  const goForward = () => {
+    if (historyIdx < history.length - 1) {
+      const newIdx = historyIdx + 1
+      setHistoryIdx(newIdx)
+      setCurrentFolderId(history[newIdx])
+      setSearch('')
+      setShowNewFolder(false)
+    }
   }
 
-  // Drive not connected
+  const canGoBack    = historyIdx > 0
+  const canGoForward = historyIdx < history.length - 1
+
+  // ── Breadcrumb path ────────────────────────────────────────────────────────
+
+  const breadcrumbPath = currentFolderId
+    ? findFolderPath(tree, currentFolderId) || []
+    : []
+
+  // ── Sync ──────────────────────────────────────────────────────────────────
+
+  const handleSync = () => {
+    setSyncing(true)
+    drivePost('/drive/sync', {})
+      .then(() => {
+        // Poll for 3s then stop spinner and reload
+        setTimeout(() => {
+          setSyncing(false)
+          loadTree()
+          if (currentFolderId !== null) loadContents(currentFolderId)
+        }, 3000)
+      })
+      .catch(() => setSyncing(false))
+  }
+
+  // ── New Folder ─────────────────────────────────────────────────────────────
+
+  const handleCreateFolder = (name) => {
+    const body = { name, ...(currentFolderId ? { parent_id: currentFolderId } : {}) }
+    drivePost('/drive/folders', body)
+      .then(() => {
+        setShowNewFolder(false)
+        loadTree()
+        if (currentFolderId !== null) {
+          loadContents(currentFolderId)
+        } else {
+          // Reload root
+          driveGet('/drive/tree').then(data => {
+            const topFolders = Array.isArray(data) ? data : (data?.folders || data?.tree || [])
+            const unorganized = Array.isArray(data) ? [] : (data?.unorganized || [])
+            setFolderContents({ folders: topFolders, files: unorganized })
+          }).catch(() => {})
+        }
+      })
+      .catch(() => setShowNewFolder(false))
+  }
+
+  // ── Not connected ──────────────────────────────────────────────────────────
+
   if (!driveConnected) {
     return (
-      <div style={{ padding: '32px 40px' }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, margin: '0 0 8px', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-          Files
-        </h1>
-        <div style={{
-          marginTop: 48,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 16,
-        }}>
-          <div style={{ fontSize: 32, opacity: 0.2 }}>☁</div>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>
-            Google Drive not connected — connect it in Integrations
-          </div>
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'integrations' }))}
-            style={{
-              background: 'rgba(124,106,247,0.15)',
-              border: '1px solid rgba(124,106,247,0.35)',
-              color: '#a89fff',
-              padding: '8px 18px',
-              borderRadius: 8,
-              fontSize: 13,
-              cursor: 'pointer',
-              fontWeight: 500,
-              transition: 'background 0.12s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,106,247,0.25)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(124,106,247,0.15)'}
-          >
-            Go to Integrations
-          </button>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        gap: 16,
+        padding: 40,
+      }}>
+        <div style={{ fontSize: 40, opacity: 0.18 }}>☁</div>
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 15, fontWeight: 500 }}>
+          Connect Google Drive in Integrations to sync files
         </div>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'integrations' }))}
+          style={{
+            background: 'rgba(124,106,247,0.15)',
+            border: '1px solid rgba(124,106,247,0.35)',
+            color: '#a89fff',
+            padding: '9px 20px',
+            borderRadius: 8,
+            fontSize: 13,
+            cursor: 'pointer',
+            fontWeight: 500,
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,106,247,0.25)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(124,106,247,0.15)'}
+        >
+          Go to Integrations
+        </button>
       </div>
     )
   }
 
-  // Full layout
-  return (
-    <div style={{ padding: isMobile ? '16px 14px' : '32px 40px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
+  // ── Status bar text ────────────────────────────────────────────────────────
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexShrink: 0, ...(isMobile && { paddingTop: 'env(safe-area-inset-top, 0px)' }) }}>
-        <div>
-          <h1 style={{
-            fontSize: isMobile ? 22 : 28,
-            fontWeight: 700,
-            margin: 0,
-            background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>
-            Files
-          </h1>
-          {syncMsg && (
-            <p style={{ color: syncMsg.includes('failed') ? '#f87171' : '#4ade80', marginTop: 4, fontSize: 12 }}>
-              {syncMsg}
-            </p>
+  const statusText = (() => {
+    const fc = folderContents.folders.length
+    const fl = folderContents.files.length
+    const parts = []
+    if (fc > 0) parts.push(`${fc} ${fc === 1 ? 'folder' : 'folders'}`)
+    if (fl > 0) parts.push(`${fl} ${fl === 1 ? 'file' : 'files'}`)
+    return parts.length > 0 ? parts.join(', ') : 'Empty'
+  })()
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const navBtnStyle = (enabled) => ({
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 6,
+    color: enabled ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.18)',
+    width: 28,
+    height: 28,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 14,
+    cursor: enabled ? 'pointer' : 'default',
+    flexShrink: 0,
+    transition: 'background 0.1s, color 0.1s',
+  })
+
+  const viewToggleStyle = (active) => ({
+    background: active ? 'rgba(124,106,247,0.25)' : 'transparent',
+    border: '1px solid ' + (active ? 'rgba(124,106,247,0.5)' : 'rgba(255,255,255,0.1)'),
+    borderRadius: 6,
+    color: active ? '#c4baff' : 'rgba(255,255,255,0.4)',
+    width: 28,
+    height: 28,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 14,
+    cursor: 'pointer',
+    transition: 'all 0.1s',
+  })
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      overflow: 'hidden',
+      boxSizing: 'border-box',
+    }}>
+
+      {/* ── Toolbar ───────────────────────────────────────────────────────── */}
+      <div style={{
+        height: 48,
+        flexShrink: 0,
+        background: 'rgba(18,18,30,0.9)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '0 14px',
+        boxSizing: 'border-box',
+      }}>
+
+        {/* Mobile: hamburger */}
+        {isMobile && (
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            style={{
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 6,
+              color: 'rgba(255,255,255,0.55)',
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 14,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            ☰
+          </button>
+        )}
+
+        {/* Back / Forward */}
+        <button
+          onClick={goBack}
+          disabled={!canGoBack}
+          style={navBtnStyle(canGoBack)}
+          onMouseEnter={e => { if (canGoBack) e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+        >
+          ←
+        </button>
+        <button
+          onClick={goForward}
+          disabled={!canGoForward}
+          style={navBtnStyle(canGoForward)}
+          onMouseEnter={e => { if (canGoForward) e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+        >
+          →
+        </button>
+
+        {/* Breadcrumb */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Breadcrumb path={breadcrumbPath} onNavigate={navigateTo} />
+        </div>
+
+        {/* Search */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search…"
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 7,
+              color: 'rgba(255,255,255,0.8)',
+              fontSize: 12,
+              padding: '5px 26px 5px 10px',
+              outline: 'none',
+              width: isMobile ? 100 : 160,
+              transition: 'border-color 0.15s',
+            }}
+            onFocus={e => e.currentTarget.style.borderColor = 'rgba(124,106,247,0.5)'}
+            onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              style={{
+                position: 'absolute',
+                right: 6,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255,255,255,0.35)',
+                cursor: 'pointer',
+                fontSize: 12,
+                padding: 0,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
           )}
         </div>
 
+        {/* View toggle */}
+        {!isMobile && (
+          <>
+            <button
+              onClick={() => setViewMode('icon')}
+              style={viewToggleStyle(viewMode === 'icon')}
+              title="Icon view"
+            >
+              ⊞
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              style={viewToggleStyle(viewMode === 'list')}
+              title="List view"
+            >
+              ≡
+            </button>
+          </>
+        )}
+
+        {/* New Folder */}
         <button
-          onClick={handleSyncDrive}
+          onClick={() => setShowNewFolder(v => !v)}
+          style={{
+            background: showNewFolder ? 'rgba(124,106,247,0.2)' : 'rgba(255,255,255,0.05)',
+            border: '1px solid ' + (showNewFolder ? 'rgba(124,106,247,0.45)' : 'rgba(255,255,255,0.1)'),
+            borderRadius: 6,
+            color: showNewFolder ? '#c4baff' : 'rgba(255,255,255,0.5)',
+            fontSize: 12,
+            fontWeight: 500,
+            padding: '0 10px',
+            height: 28,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.1s',
+            flexShrink: 0,
+          }}
+          onMouseEnter={e => { if (!showNewFolder) e.currentTarget.style.background = 'rgba(255,255,255,0.09)' }}
+          onMouseLeave={e => { if (!showNewFolder) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+        >
+          + Folder
+        </button>
+
+        {/* Sync */}
+        <button
+          onClick={handleSync}
           disabled={syncing}
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            background: syncing ? 'rgba(124,106,247,0.08)' : 'rgba(124,106,247,0.12)',
+            gap: 5,
+            background: syncing ? 'rgba(124,106,247,0.08)' : 'rgba(124,106,247,0.14)',
             border: '1px solid rgba(124,106,247,0.3)',
+            borderRadius: 6,
             color: syncing ? 'rgba(168,159,255,0.5)' : '#a89fff',
-            padding: '8px 16px',
-            borderRadius: 8,
             fontSize: 12,
             fontWeight: 500,
+            padding: '0 11px',
+            height: 28,
             cursor: syncing ? 'not-allowed' : 'pointer',
-            transition: 'background 0.12s, color 0.12s',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            transition: 'background 0.1s',
           }}
-          onMouseEnter={e => { if (!syncing) e.currentTarget.style.background = 'rgba(124,106,247,0.2)' }}
-          onMouseLeave={e => { if (!syncing) e.currentTarget.style.background = 'rgba(124,106,247,0.12)' }}
+          onMouseEnter={e => { if (!syncing) e.currentTarget.style.background = 'rgba(124,106,247,0.22)' }}
+          onMouseLeave={e => { if (!syncing) e.currentTarget.style.background = 'rgba(124,106,247,0.14)' }}
         >
-          <span style={{
-            display: 'inline-block',
-            animation: syncing ? 'spin 1s linear infinite' : 'none',
-            fontSize: 13,
-          }}>
-            ↻
-          </span>
-          {syncing ? 'Syncing…' : 'Sync Drive'}
+          {syncing ? <Spinner size={12} /> : <span style={{ fontSize: 13 }}>↻</span>}
+          {isMobile ? '' : (syncing ? ' Syncing…' : ' Sync')}
         </button>
       </div>
 
-      {/* Mobile: folder browse button + bottom-sheet overlay */}
-      {isMobile && (
-        <div style={{ marginBottom: 12, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              onClick={() => setMobileFolderOpen(true)}
-              style={{
-                background: 'rgba(124,106,247,0.12)',
-                border: '1px solid rgba(124,106,247,0.28)',
-                borderRadius: 8,
-                color: '#a89fff',
-                padding: '7px 14px',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              ◫ Browse Folders
-            </button>
-            {activeFolder && (
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', fontWeight: 600 }}>
-                {activeFolder.name}
-              </span>
+      {/* ── Body ──────────────────────────────────────────────────────────── */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}>
+
+        {/* Sidebar — desktop only */}
+        {!isMobile && (
+          <div style={{
+            width: 240,
+            flexShrink: 0,
+            background: 'rgba(12,12,22,0.8)',
+            borderRight: '1px solid rgba(255,255,255,0.06)',
+            overflowY: 'auto',
+            boxSizing: 'border-box',
+          }}>
+            {treeLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80 }}>
+                <Spinner />
+              </div>
+            ) : tree.length === 0 ? (
+              <div style={{ padding: 20, color: 'rgba(255,255,255,0.2)', fontSize: 12, textAlign: 'center', lineHeight: 1.6 }}>
+                No folders synced yet
+              </div>
+            ) : (
+              <SidebarTree
+                tree={tree}
+                activeFolderId={currentFolderId}
+                onSelect={folder => navigateTo(folder.id)}
+              />
             )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Mobile folder tree bottom sheet */}
-      {isMobile && mobileFolderOpen && (
+        {/* Content area */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'rgba(18,18,30,0.6)',
+          minWidth: 0,
+          overflow: 'hidden',
+        }}>
+
+          {/* New folder input */}
+          {showNewFolder && (
+            <NewFolderInput
+              onSubmit={handleCreateFolder}
+              onCancel={() => setShowNewFolder(false)}
+            />
+          )}
+
+          {/* Scrollable content */}
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {contentsLoading || treeLoading ? (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: 240,
+                gap: 10,
+              }}>
+                <Spinner size={18} />
+                <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>Loading…</span>
+              </div>
+            ) : tree.length === 0 ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: 280,
+                gap: 12,
+              }}>
+                <div style={{ fontSize: 40, opacity: 0.12 }}>☁</div>
+                <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 15, fontWeight: 500 }}>
+                  No Drive files synced yet
+                </div>
+                <div style={{ color: 'rgba(255,255,255,0.22)', fontSize: 13 }}>
+                  Click Sync to import your Google Drive files
+                </div>
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  style={{
+                    marginTop: 4,
+                    background: 'rgba(124,106,247,0.15)',
+                    border: '1px solid rgba(124,106,247,0.35)',
+                    borderRadius: 8,
+                    color: '#a89fff',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    padding: '9px 20px',
+                    cursor: syncing ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {syncing ? 'Syncing…' : 'Sync Drive'}
+                </button>
+              </div>
+            ) : viewMode === 'icon' ? (
+              <IconView
+                folders={folderContents.folders}
+                files={folderContents.files}
+                onFolderClick={folder => navigateTo(folder.id)}
+                isMobile={isMobile}
+                searchQuery={search}
+              />
+            ) : (
+              <ListView
+                folders={folderContents.folders}
+                files={folderContents.files}
+                onFolderClick={folder => navigateTo(folder.id)}
+                searchQuery={search}
+              />
+            )}
+          </div>
+
+          {/* Status bar */}
+          <div style={{
+            height: 28,
+            flexShrink: 0,
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 16px',
+            background: 'rgba(12,12,22,0.6)',
+          }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)' }}>
+              {contentsLoading ? 'Loading…' : statusText}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Mobile sidebar bottom sheet ────────────────────────────────── */}
+      {isMobile && mobileSidebarOpen && (
         <>
           <div
-            onClick={() => setMobileFolderOpen(false)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 500 }}
+            onClick={() => setMobileSidebarOpen(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              zIndex: 500,
+            }}
           />
           <div style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 501,
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 501,
             background: 'rgba(12,12,20,0.97)',
-            backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
             borderTop: '1px solid rgba(255,255,255,0.12)',
             borderRadius: '16px 16px 0 0',
-            maxHeight: '70vh',
+            maxHeight: '72vh',
             overflowY: 'auto',
-            padding: '12px 0 24px',
+            paddingBottom: 'env(safe-area-inset-bottom, 16px)',
           }}>
-            <div style={{ padding: '0 16px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>Folders</span>
-              <button onClick={() => setMobileFolderOpen(false)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.55)', fontSize: 20, cursor: 'pointer', padding: 0 }}>✕</button>
+            <div style={{
+              position: 'sticky',
+              top: 0,
+              background: 'rgba(12,12,20,0.97)',
+              padding: '14px 16px 10px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '1px solid rgba(255,255,255,0.07)',
+            }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>
+                Folders
+              </span>
+              <button
+                onClick={() => setMobileSidebarOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'rgba(255,255,255,0.5)',
+                  fontSize: 20,
+                  cursor: 'pointer',
+                  padding: 0,
+                  lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
             </div>
-            <FolderTree
+            <SidebarTree
               tree={tree}
-              activeFolderId={activeFolder?.id}
-              onSelect={(folder) => { handleSelectFolder(folder); setMobileFolderOpen(false) }}
+              activeFolderId={currentFolderId}
+              onSelect={folder => {
+                navigateTo(folder.id)
+                setMobileSidebarOpen(false)
+              }}
             />
           </div>
         </>
       )}
 
-      {/* Body — sidebar + panel */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 12,
-        overflow: 'hidden',
-        minHeight: 0,
-      }}>
-
-        {/* Folder sidebar — hidden on mobile */}
-        {!isMobile && (
-        <div style={{
-          width: 220,
-          flexShrink: 0,
-          background: 'rgba(255,255,255,0.03)',
-          borderRight: '1px solid rgba(255,255,255,0.08)',
-          overflowY: 'auto',
-        }}>
-          {treeLoading ? (
-            <div style={{ padding: 20, color: 'rgba(255,255,255,0.25)', fontSize: 12, textAlign: 'center' }}>
-              Loading…
-            </div>
-          ) : tree.length === 0 ? (
-            <div style={{ padding: 20, color: 'rgba(255,255,255,0.2)', fontSize: 12, textAlign: 'center', lineHeight: 1.6 }}>
-              No folders synced
-            </div>
-          ) : (
-            <FolderTree
-              tree={tree}
-              activeFolderId={activeFolder?.id}
-              onSelect={handleSelectFolder}
-            />
-          )}
-        </div>
-        )}
-
-        {/* File panel */}
-        <div style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
-
-          {/* Panel header */}
-          {activeFolder ? (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '14px 20px',
-              borderBottom: '1px solid rgba(255,255,255,0.07)',
-              flexShrink: 0,
-            }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
-                {activeFolder.name}
-              </span>
-              {!filesLoading && (
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>
-                  {folderFiles.length} {folderFiles.length === 1 ? 'file' : 'files'}
-                </span>
-              )}
-            </div>
-          ) : (
-            <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Select a folder</span>
-            </div>
-          )}
-
-          {/* No drive data at all */}
-          {!treeLoading && tree.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 260, gap: 12 }}>
-              <div style={{ fontSize: 32, opacity: 0.12 }}>☁</div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 14, fontWeight: 500 }}>
-                No Drive files synced yet.
-              </div>
-              <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>
-                Click "Sync Drive" to import your Google Drive files.
-              </div>
-            </div>
-          ) : (
-            <div style={{ padding: '6px 8px' }}>
-              <FileList
-                files={folderFiles}
-                folderName={activeFolder?.name}
-                loading={filesLoading}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Spin keyframe — injected once */}
+      {/* Global keyframes */}
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
