@@ -181,7 +181,7 @@ function IdeaCreatedCard({ idea, onNavigate }) {
   )
 }
 
-export default function GlobalChat({ open, onClose, onNavigate }) {
+export default function GlobalChat({ open, onClose, onNavigate, isMobile = false }) {
   const [messages, setMessages]     = useState([])
   const [input, setInput]           = useState('')
   const [loading, setLoading]       = useState(false)
@@ -667,7 +667,7 @@ export default function GlobalChat({ open, onClose, onNavigate }) {
         }
       `}</style>
 
-      {expanded && (
+      {!isMobile && expanded && (
         <div
           onClick={handleCollapse}
           style={{
@@ -683,35 +683,50 @@ export default function GlobalChat({ open, onClose, onNavigate }) {
         className="gc-drawer"
         style={{
           position: 'fixed',
-          ...(expanded
+          ...(isMobile
             ? {
-                top: '50%',
-                left: '50%',
-                transform: 'translateX(-50%) translateY(-50%)',
-                bottom: 'auto',
-                width: 760,
-                height: '80vh',
-                maxHeight: 680,
-                borderRadius: 16,
-              }
-            : {
-                bottom: 16,
-                left: 16,
-                top: 'auto',
+                // Full-screen overlay on mobile — sits above sidebar backdrop (zIndex 999)
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: '100%',
+                height: '100%',
+                maxHeight: 'none',
+                borderRadius: 0,
                 transform: 'none',
-                width: minimized ? 220 : 420,
-                height: minimized ? 48 : 520,
-                borderRadius: 14,
+                zIndex: 1100,
               }
+            : expanded
+              ? {
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translateX(-50%) translateY(-50%)',
+                  bottom: 'auto',
+                  width: 760,
+                  height: '80vh',
+                  maxHeight: 680,
+                  borderRadius: 16,
+                  zIndex: 300,
+                }
+              : {
+                  bottom: 16,
+                  left: 16,
+                  top: 'auto',
+                  transform: 'none',
+                  width: minimized ? 220 : 420,
+                  height: minimized ? 48 : 520,
+                  borderRadius: 14,
+                  zIndex: 300,
+                }
           ),
           background: '#242430',
-          border: '1px solid #363650',
+          border: isMobile ? 'none' : '1px solid #363650',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          zIndex: 300,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,106,247,0.1)',
-          transition: 'height 0.2s ease, bottom 0.2s ease, width 0.2s ease',
+          boxShadow: isMobile ? 'none' : '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,106,247,0.1)',
+          transition: isMobile ? 'none' : 'height 0.2s ease, bottom 0.2s ease, width 0.2s ease',
         }}
       >
         {/* Header */}
@@ -719,14 +734,14 @@ export default function GlobalChat({ open, onClose, onNavigate }) {
           display: 'flex',
           alignItems: 'center',
           gap: 12,
-          padding: minimized ? '0 12px' : '14px 16px',
-          height: minimized ? 48 : 'auto',
-          borderBottom: minimized ? 'none' : '1px solid #363650',
+          padding: (!isMobile && minimized) ? '0 12px' : '14px 16px',
+          height: (!isMobile && minimized) ? 48 : 'auto',
+          borderBottom: (!isMobile && minimized) ? 'none' : '1px solid #363650',
           flexShrink: 0,
           background: '#242430',
-          cursor: minimized ? 'pointer' : 'default',
+          cursor: (!isMobile && minimized) ? 'pointer' : 'default',
         }}
-          onClick={minimized ? () => setMinimized(false) : undefined}
+          onClick={(!isMobile && minimized) ? () => setMinimized(false) : undefined}
         >
           {/* Dot avatar */}
           <div style={{
@@ -771,8 +786,8 @@ export default function GlobalChat({ open, onClose, onNavigate }) {
               </button>
             )}
 
-            {/* Expand / Collapse */}
-            {!minimized && (
+            {/* Expand / Collapse — desktop only */}
+            {!isMobile && !minimized && (
               <button
                 onClick={expanded ? handleCollapse : handleExpand}
                 title={expanded ? 'Collapse' : 'Expand'}
@@ -789,21 +804,23 @@ export default function GlobalChat({ open, onClose, onNavigate }) {
               </button>
             )}
 
-            {/* Minimize */}
-            <button
-              onClick={() => setMinimized(v => !v)}
-              title={minimized ? 'Expand' : 'Minimize'}
-              style={{
-                background: 'transparent', border: 'none',
-                color: '#56567a', fontSize: 16, cursor: 'pointer',
-                padding: '4px 6px', lineHeight: 1, borderRadius: 4,
-                transition: 'color 0.12s',
-              }}
-              onMouseEnter={e => e.currentTarget.style.color = '#9595b8'}
-              onMouseLeave={e => e.currentTarget.style.color = '#56567a'}
-            >
-              —
-            </button>
+            {/* Minimize — desktop only */}
+            {!isMobile && (
+              <button
+                onClick={() => setMinimized(v => !v)}
+                title={minimized ? 'Expand' : 'Minimize'}
+                style={{
+                  background: 'transparent', border: 'none',
+                  color: '#56567a', fontSize: 16, cursor: 'pointer',
+                  padding: '4px 6px', lineHeight: 1, borderRadius: 4,
+                  transition: 'color 0.12s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = '#9595b8'}
+                onMouseLeave={e => e.currentTarget.style.color = '#56567a'}
+              >
+                —
+              </button>
+            )}
 
             {/* Close */}
             <button
@@ -811,12 +828,14 @@ export default function GlobalChat({ open, onClose, onNavigate }) {
               title="Close"
               style={{
                 background: 'transparent', border: 'none',
-                color: '#56567a', fontSize: 20, cursor: 'pointer',
+                color: isMobile ? 'rgba(255,255,255,0.6)' : '#56567a',
+                fontSize: isMobile ? 26 : 20,
+                cursor: 'pointer',
                 padding: '4px 6px', lineHeight: 1, borderRadius: 4,
                 transition: 'color 0.12s',
               }}
               onMouseEnter={e => e.currentTarget.style.color = '#9595b8'}
-              onMouseLeave={e => e.currentTarget.style.color = '#56567a'}
+              onMouseLeave={e => e.currentTarget.style.color = isMobile ? 'rgba(255,255,255,0.6)' : '#56567a'}
             >
               ×
             </button>
@@ -824,7 +843,7 @@ export default function GlobalChat({ open, onClose, onNavigate }) {
         </div>
 
         {/* Messages */}
-        {!minimized && (
+        {(isMobile || !minimized) && (
           <div
             className="gc-scroll"
             onScroll={handleScroll}
@@ -970,10 +989,10 @@ export default function GlobalChat({ open, onClose, onNavigate }) {
         )}
 
         {/* Input */}
-        {!minimized && (
+        {(isMobile || !minimized) && (
           <div style={{
             borderTop: '1px solid #363650',
-            padding: '10px 12px',
+            padding: isMobile ? '10px 12px 20px' : '10px 12px',
             display: 'flex',
             gap: 8,
             flexShrink: 0,

@@ -166,10 +166,39 @@ export default function App() {
         )}
         <View key={view === 'ideas' ? ideasRefreshKey : undefined} onNavigate={navigateTo} />
       </main>
+      {/* Mobile floating chat trigger — bottom-right so it doesn't clash with the top-left hamburger */}
+      {isMobile && !chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          style={{
+            position: 'fixed',
+            bottom: 20,
+            right: 16,
+            zIndex: 997,
+            width: 48,
+            height: 48,
+            background: 'linear-gradient(135deg, #7c6af7, #5b52d6)',
+            border: 'none',
+            borderRadius: '50%',
+            color: '#fff',
+            fontSize: 20,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 20px rgba(124,106,247,0.45)',
+          }}
+          aria-label="Open team chat"
+        >
+          ◈
+        </button>
+      )}
+
       <GlobalChat
         open={chatOpen}
         onClose={() => setChatOpen(false)}
         onNavigate={navigateTo}
+        isMobile={isMobile}
       />
     </div>
   )
