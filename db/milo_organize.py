@@ -163,10 +163,10 @@ Assign every file above to the correct folder. Return only the JSON array.
 
     client = anthropic.Anthropic(api_key=api_key)
 
-    _log(f"Calling Milo (claude-sonnet-4-6) with {len(files)} unorganized files...")
+    _log(f"Calling Milo (claude-haiku-4-5-20251001) with {len(files)} unorganized files...")
 
     with client.messages.stream(
-        model="claude-sonnet-4-6",
+        model="claude-haiku-4-5-20251001",
         max_tokens=4000,
         system=MILO_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
