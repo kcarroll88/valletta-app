@@ -1290,6 +1290,9 @@ def list_tasks(
             ).fetchone()
             d['subtask_count'] = counts['total'] or 0
             d['subtasks_done'] = counts['done'] or 0
+            d['comment_count'] = conn.execute(
+                "SELECT COUNT(*) FROM task_comments WHERE task_id = ?", (d['id'],)
+            ).fetchone()[0]
             result.append(d)
     return result
 
@@ -1303,6 +1306,9 @@ def get_task(task_id: int):
         d = row_to_dict(row)
         subtask_rows = conn.execute("SELECT * FROM tasks WHERE parent_id = ? ORDER BY created_at", (task_id,)).fetchall()
         d['subtasks'] = [row_to_dict(s) for s in subtask_rows]
+        d['comment_count'] = conn.execute(
+            "SELECT COUNT(*) FROM task_comments WHERE task_id = ?", (task_id,)
+        ).fetchone()[0]
     return d
 
 
@@ -1339,6 +1345,45 @@ def update_task(task_id: int, body: TaskUpdate):
 def delete_task(task_id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
+
+
+# ── Task Comments ─────────────────────────────────────────────────────────────
+
+@app.get("/api/tasks/{task_id}/comments")
+def list_task_comments(task_id: int):
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM task_comments WHERE task_id = ? ORDER BY created_at ASC",
+            (task_id,)
+        ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+class TaskCommentCreate(BaseModel):
+    author: str
+    body: str
+
+
+@app.post("/api/tasks/{task_id}/comments", status_code=201)
+def create_task_comment(task_id: int, body: TaskCommentCreate):
+    with get_db() as conn:
+        task = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        cur = conn.execute(
+            "INSERT INTO task_comments (task_id, author, body) VALUES (?, ?, ?)",
+            (task_id, body.author, body.body)
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM task_comments WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return row_to_dict(row)
+
+
+@app.delete("/api/tasks/{task_id}/comments/{comment_id}", status_code=204)
+def delete_task_comment(task_id: int, comment_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM task_comments WHERE id = ? AND task_id = ?", (comment_id, task_id))
         conn.commit()
 
 
