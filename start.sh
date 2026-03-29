@@ -15,11 +15,9 @@ python3 -m uvicorn db.api:app --host 127.0.0.1 --port 8000 \
   >> "$ROOT/db/api.log" 2>&1 &
 API_PID=$!
 
-# ── Start Felix Discord bot ───────────────────────────────────────────────────
-echo "Starting Felix Discord bot..."
-cd "$ROOT"
-python3 -u db/discord_bot.py >> "$ROOT/db/discord_bot.log" 2>&1 &
-BOT_PID=$!
+# Felix Discord bot runs on the production server (vallettamusic.com)
+# Do not start locally to avoid duplicate responses
+BOT_PID=""
 
 # ── Start Vite dev server ─────────────────────────────────────────────────────
 echo "Starting UI..."
@@ -52,5 +50,5 @@ echo ""
 echo "Press Ctrl+C to stop all servers."
 
 # Keep script alive so Ctrl+C kills children
-trap "kill $API_PID $UI_PID $BOT_PID 2>/dev/null; echo 'Stopped.'; exit" INT TERM
+trap "kill $API_PID $UI_PID 2>/dev/null; echo 'Stopped.'; exit" INT TERM
 wait
