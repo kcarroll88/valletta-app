@@ -191,9 +191,12 @@ function ConnectModal({ platform, onClose, onSuccess }) {
 
 // ─── Platform Card ────────────────────────────────────────────────────────────
 
-function PlatformCard({ platform, data, onConnect, onDisconnect }) {
+function PlatformCard({ platform, data, ytAccount, onConnect, onDisconnect }) {
   const cfg    = PLATFORM_CONFIG[platform]
-  const isConn = !!data?.connected
+  // For YouTube, treat the card as connected if ytAccount has subscriber data
+  const isConn = platform === 'youtube'
+    ? (!!data?.connected || (ytAccount && ytAccount.subscribers != null))
+    : !!data?.connected
   const [disconnecting, setDisconnecting] = useState(false)
 
   const handleDisconnect = async () => {
@@ -273,27 +276,38 @@ function PlatformCard({ platform, data, onConnect, onDisconnect }) {
       )
     }
     if (platform === 'youtube') {
+      // Prefer live ytAccount data from integration_metrics; fall back to legacy data
+      const yt = (ytAccount && ytAccount.subscribers != null) ? ytAccount : data
+      const subscribers  = yt?.subscribers  ?? yt?.subscribers
+      const totalViews   = yt?.total_views  ?? yt?.views
+      const videoCount   = yt?.video_count  ?? yt?.videos
+      const channelTitle = yt?.channel_title
       return (
         <>
           <div style={{ fontSize: 36, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-            {fmt(data.subscribers)}
+            {fmt(subscribers)}
           </div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', marginTop: 4, marginBottom: 12 }}>subscribers</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {data.views != null && (
+            {totalViews != null && (
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>
                 <span style={{ color: 'rgba(255,255,255,0.30)' }}>Views: </span>
-                {fmt(data.views)}
+                {fmt(totalViews)}
               </div>
             )}
-            {data.videos != null && (
+            {videoCount != null && (
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>
                 <span style={{ color: 'rgba(255,255,255,0.30)' }}>Videos: </span>
-                {fmt(data.videos)}
+                {fmt(videoCount)}
+              </div>
+            )}
+            {channelTitle && (
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', marginTop: 2 }}>
+                {channelTitle}
               </div>
             )}
           </div>
-          {data.channel_url && (
+          {data?.channel_url && (
             <a href={data.channel_url} target="_blank" rel="noopener noreferrer" style={{
               display: 'inline-block', marginTop: 10,
               fontSize: 11, color: cfg.accent, textDecoration: 'none', opacity: 0.75,
@@ -512,14 +526,130 @@ function EmptyState({ onConnect }) {
   )
 }
 
+// ─── Recent Videos Section ────────────────────────────────────────────────────
+
+function RecentVideos({ videos }) {
+  if (!videos) return null
+
+  if (videos.length === 0) {
+    return (
+      <div style={{ ...GLASS_CARD, marginBottom: 24 }}>
+        <div style={{
+          fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase',
+          color: 'rgba(255,255,255,0.35)', marginBottom: 16,
+        }}>Recent Videos</div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.30)', padding: '12px 0' }}>
+          No data yet — sync from Integrations
+        </div>
+      </div>
+    )
+  }
+
+  const sorted = [...videos]
+    .sort((a, b) => Number(b.views || 0) - Number(a.views || 0))
+    .slice(0, 10)
+
+  return (
+    <div style={{ ...GLASS_CARD, marginBottom: 24 }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase',
+        color: 'rgba(255,255,255,0.35)', marginBottom: 16,
+      }}>Recent Videos</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {sorted.map((video, i) => {
+          const title = video.title || 'Untitled'
+          const truncated = title.length > 70 ? title.slice(0, 67) + '…' : title
+          return (
+            <div
+              key={i}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 14px',
+                background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
+                borderRadius: 8,
+                transition: 'background 150ms',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}
+            >
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, marginRight: 16 }}>
+                {truncated}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                {[
+                  { label: 'Views',    value: video.views,    accent: '#ff0000' },
+                  { label: 'Likes',    value: video.likes,    accent: '#a89fff' },
+                  { label: 'Comments', value: video.comments, accent: 'rgba(255,255,255,0.40)' },
+                ].map(stat => stat.value != null && (
+                  <span
+                    key={stat.label}
+                    style={{
+                      fontSize: 11, fontWeight: 600,
+                      padding: '3px 9px',
+                      borderRadius: 20,
+                      background: `${stat.accent}18`,
+                      color: stat.accent,
+                      border: `1px solid ${stat.accent}44`,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span style={{ opacity: 0.6, fontWeight: 400, marginRight: 3, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 9 }}>
+                      {stat.label}
+                    </span>
+                    {fmt(stat.value)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Insights view ───────────────────────────────────────────────────────
 
 export default function Insights({ onNavigate }) {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [error,   setError]   = useState(null)
-  const [modal,   setModal]   = useState(null) // platform id or null
+  const [data,         setData]         = useState(null)
+  const [loading,      setLoading]      = useState(true)
+  const [syncing,      setSyncing]      = useState(false)
+  const [error,        setError]        = useState(null)
+  const [modal,        setModal]        = useState(null) // platform id or null
+  const [ytAccount,    setYtAccount]    = useState(null)
+  const [ytVideos,     setYtVideos]     = useState(null)
+
+  const fetchYoutubeData = () => {
+    api.youtubeMetrics('account')
+      .then(res => {
+        // res may be an array of records; take the most recent
+        if (Array.isArray(res) && res.length > 0) {
+          const record = res[res.length - 1]
+          const d = typeof record.data === 'string' ? JSON.parse(record.data) : (record.data || record)
+          setYtAccount({ ...d, synced_at: record.recorded_at || record.synced_at || null })
+        } else if (res && !Array.isArray(res)) {
+          setYtAccount(res)
+        } else {
+          setYtAccount({})
+        }
+      })
+      .catch(() => setYtAccount({}))
+
+    api.youtubeMetrics('post')
+      .then(res => {
+        if (Array.isArray(res)) {
+          const parsed = res.map(r => {
+            const d = typeof r.data === 'string' ? JSON.parse(r.data) : (r.data || r)
+            return d
+          })
+          setYtVideos(parsed)
+        } else {
+          setYtVideos([])
+        }
+      })
+      .catch(() => setYtVideos([]))
+  }
 
   const fetchData = () => {
     setLoading(true)
@@ -532,12 +662,16 @@ export default function Insights({ onNavigate }) {
 
   useEffect(() => {
     fetchData()
+    fetchYoutubeData()
   }, [])
 
   const handleSyncAll = () => {
     setSyncing(true)
     api.insightsSync()
-      .then(() => api.insights().then(setData))
+      .then(() => {
+        fetchYoutubeData()
+        return api.insights().then(setData)
+      })
       .catch(e => setError(e.message))
       .finally(() => setSyncing(false))
   }
@@ -549,6 +683,7 @@ export default function Insights({ onNavigate }) {
       await api.insightsSync()
       const fresh = await api.insights()
       setData(fresh)
+      fetchYoutubeData()
     } catch (e) {
       setError(e.message)
     } finally {
@@ -659,13 +794,14 @@ export default function Insights({ onNavigate }) {
       {!loading && data && (
         <>
           {/* Platform cards */}
-          {anyConnected ? (
+          {(anyConnected || (ytAccount && ytAccount.subscribers != null)) ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
               {PLATFORMS.map(platform => (
                 <PlatformCard
                   key={platform}
                   platform={platform}
                   data={platformData[platform] || null}
+                  ytAccount={platform === 'youtube' ? ytAccount : undefined}
                   onConnect={setModal}
                   onDisconnect={handleDisconnect}
                 />
@@ -677,6 +813,9 @@ export default function Insights({ onNavigate }) {
 
           {/* Snapshot table */}
           {snapshots.length > 0 && <SnapshotTable snapshots={snapshots} />}
+
+          {/* Recent Videos — shown whenever YouTube post data exists */}
+          {ytVideos && ytVideos.length > 0 && <RecentVideos videos={ytVideos} />}
         </>
       )}
 

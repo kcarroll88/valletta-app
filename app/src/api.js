@@ -111,6 +111,7 @@ export const api = {
   insightsConnect:    (body)     => req('/insights/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   insightsSync:       ()         => req('/insights/sync', { method: 'POST' }),
   insightsDisconnect: (platform) => req(`/insights/connect/${platform}`, { method: 'DELETE' }),
+  youtubeMetrics:     (type = 'account') => req(`/integrations/data/metrics?platform=youtube&metric_type=${type}`),
 
   // Upload
   uploadFile: (file) => {
