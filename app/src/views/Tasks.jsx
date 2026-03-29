@@ -8,6 +8,11 @@ const STATUS_COLOR = { todo: '#9595b8', in_progress: '#7c6af7', done: '#4ade80',
 const STATUS_LABEL = { todo: 'To Do', in_progress: 'In Progress', done: 'Done', blocked: 'Blocked', backlog: 'Backlog' }
 const PRIORITY_COLOR = { high: '#f87171', medium: '#fbbf24', low: '#4ade80' }
 const BOARD_STATUSES = ['todo', 'in_progress', 'blocked', 'done']
+const ALL_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'backlog']
+
+// Status sort order for table default sort
+const STATUS_ORDER = { todo: 0, in_progress: 1, blocked: 2, done: 3, backlog: 4 }
+const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 }
 
 const TEAM_MEMBERS = [
   'Keenan', 'Justin',
@@ -792,7 +797,6 @@ function KanbanColumn({ status, tasks, onCardClick, onAddTask, onDrop, dragOverS
   }
 
   const handleDragLeave = (e) => {
-    // Only clear if leaving the column entirely
     if (!e.currentTarget.contains(e.relatedTarget)) {
       setDragOverStatus(null)
     }
@@ -1098,6 +1102,578 @@ function ConfirmDelete({ label, onCancel, onConfirm }) {
   )
 }
 
+// ─── Table View Popover ───────────────────────────────────────────────────────
+
+function Popover({ anchorRef, onClose, children }) {
+  const popRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (popRef.current && !popRef.current.contains(e.target) &&
+          anchorRef.current && !anchorRef.current.contains(e.target)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose, anchorRef])
+
+  // Position below anchor
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  useEffect(() => {
+    if (anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + 4, left: rect.left })
+    }
+  }, [anchorRef])
+
+  return (
+    <div
+      ref={popRef}
+      style={{
+        position: 'fixed',
+        top: pos.top, left: pos.left,
+        zIndex: 200,
+        background: 'rgba(28,28,42,0.98)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        borderRadius: 8,
+        padding: 8,
+        minWidth: 140,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function PopoverOption({ label, color, active, onClick }) {
+  const [hov, setHov] = useState(false)
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        height: 32, display: 'flex', alignItems: 'center', gap: 8,
+        padding: '0 10px', borderRadius: 6, cursor: 'pointer',
+        background: hov ? 'rgba(255,255,255,0.08)' : active ? 'rgba(255,255,255,0.05)' : 'transparent',
+        fontSize: 13,
+        color: color || 'rgba(255,255,255,0.8)',
+        fontWeight: active ? 600 : 400,
+      }}
+    >
+      {color && <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />}
+      {label}
+    </div>
+  )
+}
+
+// ─── Table View ───────────────────────────────────────────────────────────────
+
+function TableView({ tasks, onTaskClick, onUpdateTask, onAddTask, isMobile }) {
+  const [sortCol, setSortCol]   = useState('status')
+  const [sortDir, setSortDir]   = useState('asc')
+  const [popover, setPopover]   = useState(null) // { taskId, field, anchorRef }
+  const [addingStatus, setAddingStatus] = useState(null) // status key for inline add row
+  const [addTitle, setAddTitle] = useState('')
+  const popAnchorRefs = useRef({})
+
+  const toggleSort = (col) => {
+    if (sortCol === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortCol(col)
+      setSortDir('asc')
+    }
+  }
+
+  const sortedTasks = [...tasks].sort((a, b) => {
+    let aVal, bVal
+    if (sortCol === 'status') {
+      aVal = STATUS_ORDER[a.status] ?? 99
+      bVal = STATUS_ORDER[b.status] ?? 99
+      if (aVal === bVal) {
+        aVal = PRIORITY_ORDER[a.priority] ?? 99
+        bVal = PRIORITY_ORDER[b.priority] ?? 99
+      }
+    } else if (sortCol === 'priority') {
+      aVal = PRIORITY_ORDER[a.priority] ?? 99
+      bVal = PRIORITY_ORDER[b.priority] ?? 99
+    } else if (sortCol === 'title') {
+      aVal = a.title?.toLowerCase() || ''
+      bVal = b.title?.toLowerCase() || ''
+    } else if (sortCol === 'assignee') {
+      aVal = a.assignee?.toLowerCase() || 'zzz'
+      bVal = b.assignee?.toLowerCase() || 'zzz'
+    } else if (sortCol === 'due_date') {
+      aVal = a.due_date || '9999-12-31'
+      bVal = b.due_date || '9999-12-31'
+    } else {
+      aVal = 0; bVal = 0
+    }
+    if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
+    if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+
+  // Group by status when sorting by status
+  const groupedByStatus = sortCol === 'status'
+  const groups = groupedByStatus
+    ? ALL_STATUSES.map(s => ({ status: s, rows: sortedTasks.filter(t => t.status === s) })).filter(g => g.rows.length > 0 || addingStatus === g.status)
+    : [{ status: null, rows: sortedTasks }]
+
+  const openPopover = (taskId, field, ref) => {
+    setPopover({ taskId, field, anchorRef: ref })
+  }
+  const closePopover = () => setPopover(null)
+
+  const handleInlinePatch = async (taskId, fields) => {
+    closePopover()
+    const updated = await api.updateTask(taskId, fields)
+    onUpdateTask(updated)
+  }
+
+  const handleAddInGroup = async (status) => {
+    if (!addTitle.trim()) { setAddingStatus(null); return }
+    await onAddTask({ title: addTitle.trim(), status, priority: 'medium' })
+    setAddTitle('')
+    setAddingStatus(null)
+  }
+
+  const colHeader = (label, col, width, hide) => {
+    if (hide) return null
+    const active = sortCol === col
+    return (
+      <th
+        key={col}
+        onClick={() => toggleSort(col)}
+        style={{
+          width, minWidth: width, padding: '0 12px',
+          fontSize: 11, fontWeight: 600, color: active ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.35)',
+          textTransform: 'uppercase', letterSpacing: '0.07em',
+          cursor: 'pointer', userSelect: 'none',
+          textAlign: 'left', whiteSpace: 'nowrap',
+        }}
+      >
+        {label} {active ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+      </th>
+    )
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        {/* Sticky header */}
+        <thead>
+          <tr style={{
+            position: 'sticky', top: 0,
+            background: 'rgba(18,18,30,0.95)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            zIndex: 10,
+            height: 36,
+          }}>
+            {!isMobile && (
+              <th style={{ width: 24, minWidth: 24, padding: '0 4px' }} />
+            )}
+            {colHeader('Title', 'title', undefined, false)}
+            {colHeader('Status', 'status', 130, false)}
+            {colHeader('Priority', 'priority', 100, false)}
+            {!isMobile && colHeader('Assignee', 'assignee', 110, false)}
+            {!isMobile && colHeader('Due Date', 'due_date', 110, false)}
+            {!isMobile && (
+              <th style={{ width: 90, minWidth: 90, padding: '0 12px', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'left' }}>
+                Subtasks
+              </th>
+            )}
+            {!isMobile && (
+              <th style={{ width: 70, minWidth: 70, padding: '0 12px', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'left' }}>
+                Comments
+              </th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map(({ status, rows }) => (
+            <>
+              {/* Group header row (only when sorting by status) */}
+              {groupedByStatus && status && (
+                <tr key={`group-${status}`} style={{ background: STATUS_COLOR[status] + '18' }}>
+                  <td
+                    colSpan={isMobile ? 3 : 8}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: 12, fontWeight: 700,
+                      color: STATUS_COLOR[status],
+                      letterSpacing: '0.04em',
+                      borderBottom: `1px solid ${STATUS_COLOR[status]}33`,
+                      borderLeft: `3px solid ${STATUS_COLOR[status]}`,
+                    }}
+                  >
+                    {STATUS_LABEL[status]}
+                    <span style={{
+                      marginLeft: 8, fontSize: 11, fontWeight: 400,
+                      background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)',
+                      borderRadius: 10, padding: '1px 7px',
+                    }}>{rows.length}</span>
+                  </td>
+                </tr>
+              )}
+
+              {/* Task rows */}
+              {rows.map(task => (
+                <TableRow
+                  key={task.id}
+                  task={task}
+                  isMobile={isMobile}
+                  onTitleClick={() => onTaskClick(task.id)}
+                  onPatch={(fields) => handleInlinePatch(task.id, fields)}
+                  popover={popover}
+                  openPopover={openPopover}
+                  closePopover={closePopover}
+                  popAnchorRefs={popAnchorRefs}
+                />
+              ))}
+
+              {/* Add task row for this group */}
+              {groupedByStatus && status && (
+                <tr key={`add-${status}`}>
+                  <td
+                    colSpan={isMobile ? 3 : 8}
+                    style={{ padding: '2px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                  >
+                    {addingStatus === status ? (
+                      <div style={{ display: 'flex', gap: 6, padding: '4px 12px' }}>
+                        <input
+                          autoFocus
+                          value={addTitle}
+                          onChange={e => setAddTitle(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleAddInGroup(status)
+                            if (e.key === 'Escape') { setAddingStatus(null); setAddTitle('') }
+                          }}
+                          placeholder="Task title…"
+                          style={{ ...fieldStyle, fontSize: 13, padding: '5px 10px', flex: 1 }}
+                        />
+                        <button
+                          onClick={() => handleAddInGroup(status)}
+                          style={{ background: 'rgba(124,106,247,0.2)', border: '1px solid rgba(124,106,247,0.4)', borderRadius: 6, color: '#a89fff', fontSize: 12, cursor: 'pointer', padding: '5px 12px', flexShrink: 0 }}
+                        >Add</button>
+                        <button
+                          onClick={() => { setAddingStatus(null); setAddTitle('') }}
+                          style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer', padding: '5px 10px', flexShrink: 0 }}
+                        >Cancel</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setAddingStatus(status); setAddTitle('') }}
+                        style={{
+                          background: 'transparent', border: 'none', cursor: 'pointer',
+                          color: 'rgba(255,255,255,0.2)', fontSize: 13, padding: '5px 12px',
+                          width: '100%', textAlign: 'left', transition: 'color 0.12s',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.45)'}
+                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.2)'}
+                      >+ Add task</button>
+                    )}
+                  </td>
+                </tr>
+              )}
+            </>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Popover rendered outside table */}
+      {popover && (
+        <PopoverLayer
+          popover={popover}
+          onClose={closePopover}
+          onPatch={(fields) => handleInlinePatch(popover.taskId, fields)}
+          tasks={tasks}
+        />
+      )}
+    </div>
+  )
+}
+
+function TableRow({ task, isMobile, onTitleClick, onPatch, popover, openPopover, closePopover, popAnchorRefs }) {
+  const [hov, setHov] = useState(false)
+  const overdueDate = isOverdue(task.due_date)
+
+  const getRef = (field) => {
+    const key = `${task.id}-${field}`
+    if (!popAnchorRefs.current[key]) popAnchorRefs.current[key] = { current: null }
+    return popAnchorRefs.current[key]
+  }
+
+  const isPopOpen = (field) => popover?.taskId === task.id && popover?.field === field
+
+  const cellClick = (field, e) => {
+    e.stopPropagation()
+    const key = `${task.id}-${field}`
+    if (!popAnchorRefs.current[key]) popAnchorRefs.current[key] = { current: e.currentTarget }
+    else popAnchorRefs.current[key].current = e.currentTarget
+    if (isPopOpen(field)) {
+      closePopover()
+    } else {
+      openPopover(task.id, field, popAnchorRefs.current[key])
+    }
+  }
+
+  return (
+    <tr
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        height: 44,
+        background: hov ? 'rgba(255,255,255,0.04)' : 'transparent',
+        borderLeft: `3px solid ${PRIORITY_COLOR[task.priority] || '#9595b8'}`,
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        transition: 'background 0.1s',
+        cursor: 'default',
+      }}
+    >
+      {/* Drag handle — desktop only */}
+      {!isMobile && (
+        <td style={{ width: 24, padding: '0 4px', color: 'rgba(255,255,255,0.15)', fontSize: 14, textAlign: 'center' }}>
+          {hov ? '⠿' : ''}
+        </td>
+      )}
+
+      {/* Title */}
+      <td
+        onClick={onTitleClick}
+        style={{
+          padding: '0 12px', fontWeight: 700, fontSize: 14,
+          color: 'rgba(255,255,255,0.92)', cursor: 'pointer',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+      >
+        {task.title}
+      </td>
+
+      {/* Status */}
+      <td
+        onClick={(e) => cellClick('status', e)}
+        style={{ width: 130, padding: '0 12px', cursor: 'pointer' }}
+      >
+        <span style={{
+          display: 'inline-block', padding: '3px 10px', borderRadius: 20,
+          fontSize: 12, fontWeight: 600,
+          background: (STATUS_COLOR[task.status] || '#9595b8') + '28',
+          color: STATUS_COLOR[task.status] || '#9595b8',
+          border: `1px solid ${(STATUS_COLOR[task.status] || '#9595b8')}55`,
+          whiteSpace: 'nowrap',
+        }}>
+          {STATUS_LABEL[task.status] || task.status}
+        </span>
+      </td>
+
+      {/* Priority */}
+      <td
+        onClick={(e) => cellClick('priority', e)}
+        style={{ width: 100, padding: '0 12px', cursor: 'pointer' }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: PRIORITY_COLOR[task.priority] || '#9595b8', flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: PRIORITY_COLOR[task.priority] || 'rgba(255,255,255,0.5)' }}>
+            {task.priority ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1) : '—'}
+          </span>
+        </span>
+      </td>
+
+      {/* Assignee — desktop only */}
+      {!isMobile && (
+        <td
+          onClick={(e) => cellClick('assignee', e)}
+          style={{ width: 110, padding: '0 12px', cursor: 'pointer' }}
+        >
+          {task.assignee ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: 'rgba(124,106,247,0.4)',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0,
+              }}>{task.assignee.charAt(0).toUpperCase()}</span>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {task.assignee}
+              </span>
+            </span>
+          ) : (
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>—</span>
+          )}
+        </td>
+      )}
+
+      {/* Due Date — desktop only */}
+      {!isMobile && (
+        <td
+          onClick={(e) => cellClick('due_date', e)}
+          style={{ width: 110, padding: '0 12px', cursor: 'pointer' }}
+        >
+          <span style={{ fontSize: 12, color: overdueDate ? '#f87171' : 'rgba(255,255,255,0.45)' }}>
+            {task.due_date ? fmtDate(task.due_date) : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>}
+          </span>
+        </td>
+      )}
+
+      {/* Subtasks — desktop only */}
+      {!isMobile && (
+        <td style={{ width: 90, padding: '0 12px' }}>
+          {task.subtask_count > 0 ? (
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+              {task.subtasks_done ?? 0}/{task.subtask_count} ✓
+            </span>
+          ) : (
+            <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 12 }}>—</span>
+          )}
+        </td>
+      )}
+
+      {/* Comments — desktop only */}
+      {!isMobile && (
+        <td style={{ width: 70, padding: '0 12px' }}>
+          {task.comment_count > 0 ? (
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>💬 {task.comment_count}</span>
+          ) : null}
+        </td>
+      )}
+    </tr>
+  )
+}
+
+function PopoverLayer({ popover, onClose, onPatch, tasks }) {
+  const task = tasks.find(t => t.id === popover.taskId)
+  if (!task) return null
+
+  const { field, anchorRef } = popover
+
+  // Get anchor position
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const popRef = useRef(null)
+
+  useEffect(() => {
+    if (anchorRef?.current) {
+      const rect = anchorRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + 4, left: rect.left })
+    }
+  }, [anchorRef])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (popRef.current && !popRef.current.contains(e.target) &&
+          anchorRef?.current && !anchorRef.current.contains(e.target)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose, anchorRef])
+
+  const [dateVal, setDateVal] = useState(task.due_date || '')
+
+  const popStyle = {
+    position: 'fixed',
+    top: pos.top, left: pos.left,
+    zIndex: 200,
+    background: 'rgba(28,28,42,0.98)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 8,
+    padding: 8,
+    minWidth: field === 'due_date' ? 180 : 150,
+    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+  }
+
+  if (field === 'status') {
+    return (
+      <div ref={popRef} style={popStyle}>
+        {ALL_STATUSES.map(s => (
+          <PopoverOption
+            key={s}
+            label={STATUS_LABEL[s]}
+            color={STATUS_COLOR[s]}
+            active={task.status === s}
+            onClick={() => onPatch({ status: s })}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  if (field === 'priority') {
+    return (
+      <div ref={popRef} style={popStyle}>
+        {['high', 'medium', 'low'].map(p => (
+          <PopoverOption
+            key={p}
+            label={p.charAt(0).toUpperCase() + p.slice(1)}
+            color={PRIORITY_COLOR[p]}
+            active={task.priority === p}
+            onClick={() => onPatch({ priority: p })}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  if (field === 'assignee') {
+    return (
+      <div ref={popRef} style={{ ...popStyle, maxHeight: 240, overflowY: 'auto' }}>
+        <PopoverOption
+          label="Unassigned"
+          color={null}
+          active={!task.assignee}
+          onClick={() => onPatch({ assignee: null })}
+        />
+        {TEAM_MEMBERS.map(m => (
+          <PopoverOption
+            key={m}
+            label={m}
+            color={null}
+            active={task.assignee === m}
+            onClick={() => onPatch({ assignee: m })}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  if (field === 'due_date') {
+    return (
+      <div ref={popRef} style={popStyle}>
+        <input
+          type="date"
+          value={dateVal}
+          autoFocus
+          onChange={e => setDateVal(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') onPatch({ due_date: dateVal || null })
+            if (e.key === 'Escape') onClose()
+          }}
+          style={{ ...fieldStyle, fontSize: 13, colorScheme: 'dark', width: 160 }}
+        />
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <button
+            onClick={() => onPatch({ due_date: dateVal || null })}
+            style={{ flex: 1, background: 'rgba(124,106,247,0.2)', border: '1px solid rgba(124,106,247,0.4)', borderRadius: 6, color: '#a89fff', fontSize: 12, cursor: 'pointer', padding: '5px' }}
+          >Set</button>
+          {task.due_date && (
+            <button
+              onClick={() => onPatch({ due_date: null })}
+              style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer', padding: '5px 8px' }}
+            >Clear</button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+
 // ─── Main Tasks View ──────────────────────────────────────────────────────────
 
 export default function Tasks() {
@@ -1109,16 +1685,30 @@ export default function Tasks() {
   const [deleteTarget, setDeleteTarget]   = useState(null)
   const [dragOverStatus, setDragOverStatus] = useState(null)
 
+  // View toggle: 'board' | 'table'
+  const [view, setView] = useState(() => localStorage.getItem('vlt_tasks_view') || 'board')
+
+  const switchView = (v) => {
+    setView(v)
+    localStorage.setItem('vlt_tasks_view', v)
+  }
+
   // Filters
   const [search, setSearch]               = useState('')
   const [filterPriority, setFilterPriority] = useState('all')
   const [filterAssignee, setFilterAssignee] = useState('')
 
+  // ── Bug fix: fetch ALL tasks then filter client-side for top-level (parent_id is null/undefined/0)
+  // Previously the code passed `{ parent_id: 'null' }` which URLSearchParams serialized as the
+  // string "null", causing the backend to return no results if it expected IS NULL.
+  // Now we fetch everything and filter client-side to only keep top-level tasks.
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const all = await api.tasks({ parent_id: 'null' })
-      setTasks(all)
+      const all = await api.tasks({})
+      // Keep only top-level tasks (no parent)
+      const topLevel = all.filter(t => !t.parent_id)
+      setTasks(topLevel)
     } finally {
       setLoading(false)
     }
@@ -1138,6 +1728,7 @@ export default function Tasks() {
 
   const boardTasks = (status) => applyFilters(tasks.filter(t => t.status === status))
   const backlogTasks = applyFilters(tasks.filter(t => t.status === 'backlog'))
+  const allFilteredTasks = applyFilters(tasks)
 
   const handleAddTask = async (data) => {
     const created = await api.createTask(data)
@@ -1183,6 +1774,45 @@ export default function Tasks() {
           Tasks
         </h1>
 
+        {/* View toggle — left of search */}
+        {!isMobile && (
+          <div style={{
+            display: 'flex', gap: 2, padding: 3,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 8,
+          }}>
+            <button
+              onClick={() => switchView('board')}
+              title="Board view"
+              style={{
+                padding: '5px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer', border: 'none',
+                background: view === 'board' ? '#7c6af7' : 'transparent',
+                color: view === 'board' ? 'white' : 'rgba(255,255,255,0.45)',
+                fontWeight: view === 'board' ? 600 : 400,
+                transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}
+            >
+              <span style={{ fontSize: 14 }}>⊞</span> Board
+            </button>
+            <button
+              onClick={() => switchView('table')}
+              title="Table view"
+              style={{
+                padding: '5px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer', border: 'none',
+                background: view === 'table' ? '#7c6af7' : 'transparent',
+                color: view === 'table' ? 'white' : 'rgba(255,255,255,0.45)',
+                fontWeight: view === 'table' ? 600 : 400,
+                transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}
+            >
+              <span style={{ fontSize: 14 }}>≡</span> Table
+            </button>
+          </div>
+        )}
+
         {/* Search */}
         <input
           value={search}
@@ -1190,7 +1820,7 @@ export default function Tasks() {
           placeholder="Search tasks…"
           style={{
             ...fieldStyle, width: isMobile ? '100%' : 220, padding: '7px 12px',
-            marginLeft: isMobile ? 0 : 8,
+            marginLeft: isMobile ? 0 : 0,
           }}
         />
 
@@ -1236,7 +1866,7 @@ export default function Tasks() {
           Loading tasks…
         </div>
       ) : isMobile ? (
-        /* Mobile view */
+        /* Mobile view — always uses kanban-style tab view */
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <MobileKanban
             tasks={applyFilters(tasks.filter(t => t.status !== 'backlog'))}
@@ -1253,6 +1883,15 @@ export default function Tasks() {
             />
           </div>
         </div>
+      ) : view === 'table' ? (
+        /* Table view */
+        <TableView
+          tasks={allFilteredTasks}
+          onTaskClick={setSelectedTaskId}
+          onUpdateTask={handleUpdateTask}
+          onAddTask={handleAddTask}
+          isMobile={isMobile}
+        />
       ) : (
         /* Desktop kanban board */
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
