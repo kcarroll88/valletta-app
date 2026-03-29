@@ -33,7 +33,11 @@ const VIEWS = {
 
 export default function App() {
   const [authed,        setAuthed]        = useState(null) // null = checking, true/false = known
-  const [view,          setView]          = useState('dashboard')
+  const [view,          setView]          = useState(() => {
+    const saved = localStorage.getItem('vlt_page')
+    const valid = Object.keys(VIEWS)
+    return (saved && valid.includes(saved)) ? saved : 'dashboard'
+  })
   const [chatOpen,      setChatOpen]      = useState(false)
   const [ideasRefreshKey, setIdeasRefreshKey] = useState(0)
   const [sidebarOpen,   setSidebarOpen]   = useState(false)
@@ -43,6 +47,7 @@ export default function App() {
     if (target === 'ideas') {
       setIdeasRefreshKey(k => k + 1)
     }
+    localStorage.setItem('vlt_page', target)
     setView(target)
     if (isMobile) setSidebarOpen(false)
   }
