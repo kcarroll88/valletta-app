@@ -24,18 +24,14 @@ export default function Login({ onLogin }) {
     }}>
       <div style={{ width: 360, textAlign: 'center' }}>
         {/* Logo / wordmark */}
-        <div style={{ marginBottom: 40 }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: '50%',
-            background: 'linear-gradient(135deg, #7c6af7, #a89fff)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 16px',
-            fontSize: 22, fontWeight: 800, color: '#fff',
-          }}>V</div>
-          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.12em', color: '#e8e8f8' }}>
-            VALLETTA
-          </div>
-          <div style={{ fontSize: 12, color: '#9595b8', letterSpacing: '0.15em', marginTop: 4 }}>
+        <div style={{ marginBottom: 40, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <img
+            src="/logo-light.png"
+            alt="Valletta"
+            draggable="false"
+            style={{ height: 48, width: 'auto', objectFit: 'contain', userSelect: 'none', display: 'block', marginBottom: 16 }}
+          />
+          <div style={{ fontSize: 12, color: '#9595b8', letterSpacing: '0.15em' }}>
             COMMAND CENTER
           </div>
         </div>

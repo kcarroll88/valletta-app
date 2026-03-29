@@ -138,17 +138,12 @@ export default function Sidebar({ active, onNav, onLogout, onChatOpen, isMobile,
       {/* Wordmark + close button on mobile */}
       <div style={{ padding: '0 24px 32px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <div style={{
-            fontSize: 18,
-            fontWeight: 700,
-            letterSpacing: '0.20em',
-            background: 'linear-gradient(135deg, #ffffff 0%, #c4b5fd 50%, #a89fff 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>
-            VALLETTA
-          </div>
+          <img
+            src="/logo-light.png"
+            alt="Valletta"
+            draggable="false"
+            style={{ height: 32, width: 'auto', objectFit: 'contain', userSelect: 'none', display: 'block' }}
+          />
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.20em', marginTop: 2 }}>
             COMMAND CENTER
           </div>
