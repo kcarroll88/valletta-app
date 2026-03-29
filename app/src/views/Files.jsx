@@ -141,64 +141,100 @@ function findFolder(tree, id) {
   return null
 }
 
-// ─── SVG Icon Components ──────────────────────────────────────────────────────
+// ─── Pure CSS Icon Components ─────────────────────────────────────────────────
 
 function FolderIcon({ color = '#4A90D9', size = 48 }) {
+  const r = Math.round(size * 0.12) // corner radius scales with size
+  const tabH = Math.round(size * 0.18)
+  const tabW = Math.round(size * 0.45)
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Back of folder (slightly darker) */}
-      <path
-        d="M4 16C4 14.9 4.9 14 6 14H20L24 18H42C43.1 18 44 18.9 44 20V38C44 39.1 43.1 40 42 40H6C4.9 40 4 39.1 4 38V16Z"
-        fill={color}
-        opacity="0.6"
-      />
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      {/* Tab on top-left */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: tabW,
+        height: tabH,
+        background: color,
+        opacity: 0.75,
+        borderRadius: `${r}px ${r}px 0 0`,
+      }} />
       {/* Main folder body */}
-      <rect x="4" y="20" width="40" height="20" rx="2" fill={color}/>
-      {/* Top shine */}
-      <rect x="4" y="20" width="40" height="5" rx="2" fill="white" opacity="0.12"/>
-    </svg>
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        top: Math.round(tabH * 0.6),
+        background: color,
+        borderRadius: `0 ${r}px ${r}px ${r}px`,
+        boxShadow: `inset 0 ${Math.round(size*0.06)}px 0 rgba(255,255,255,0.15)`,
+      }} />
+    </div>
   )
 }
 
 function FileIcon({ mimeType = '', size = 48 }) {
   const { color, label } = fileIconMap(mimeType)
-  const labelSize = Math.max(8, Math.round(size * 0.18))
+  const cornerSize = Math.round(size * 0.22)
+  const fontSize = Math.max(7, Math.round(size * 0.17))
+  const r = Math.round(size * 0.08)
 
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {/* Document body */}
-        <rect x="6" y="4" width="30" height="38" rx="3" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
-        {/* Folded corner — white triangle cutout */}
-        <path d="M28 4 L36 12 L28 12 Z" fill="rgba(18,18,30,0.9)"/>
-        <path d="M28 4 L36 12" stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
-        {/* Color band at bottom */}
-        <rect x="6" y="30" width="30" height="12" rx="0" fill={color} opacity="0.9"/>
-        <rect x="6" y="39" width="30" height="3" rx="0" style={{fill: color}}/>
-        {/* Bottom corners rounding fix */}
-        <rect x="6" y="39" width="30" height="3" rx="3" fill={color} opacity="0.9"/>
-        {/* Subtle content lines */}
-        <line x1="11" y1="18" x2="31" y2="18" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeLinecap="round"/>
-        <line x1="11" y1="23" x2="25" y2="23" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeLinecap="round"/>
-        <line x1="11" y1="28" x2="28" y2="28" stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-      {/* Type label rendered as HTML — always crisp */}
+      {/* Document body */}
       <div style={{
         position: 'absolute',
-        bottom: Math.round(size * 0.08),
+        inset: 0,
+        background: 'rgba(255,255,255,0.08)',
+        border: '1px solid rgba(255,255,255,0.16)',
+        borderRadius: r,
+        // Clip the top-right corner for the fold effect
+        clipPath: `polygon(0 0, calc(100% - ${cornerSize}px) 0, 100% ${cornerSize}px, 100% 100%, 0 100%)`,
+      }} />
+      {/* Folded corner triangle */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: cornerSize,
+        height: cornerSize,
+        background: color,
+        opacity: 0.6,
+        clipPath: 'polygon(0 0, 100% 100%, 100% 0)',
+      }} />
+      {/* Color bar at bottom */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '28%',
+        background: color,
+        borderRadius: `0 0 ${r}px ${r}px`,
+      }} />
+      {/* File type label — native HTML text, always crisp */}
+      <div style={{
+        position: 'absolute',
+        bottom: '4%',
         left: 0,
         right: 0,
         textAlign: 'center',
-        fontSize: labelSize,
+        fontSize,
         fontWeight: 700,
         color: '#fff',
-        letterSpacing: '0.04em',
+        letterSpacing: '0.05em',
         lineHeight: 1,
-        pointerEvents: 'none',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+        userSelect: 'none',
       }}>
         {label}
+      </div>
+      {/* Content lines in upper area */}
+      <div style={{ position: 'absolute', top: '30%', left: '15%', right: '15%', display: 'flex', flexDirection: 'column', gap: Math.round(size * 0.08) }}>
+        <div style={{ height: 1.5, background: 'rgba(255,255,255,0.18)', borderRadius: 1 }} />
+        <div style={{ height: 1.5, background: 'rgba(255,255,255,0.18)', borderRadius: 1, width: '70%' }} />
       </div>
     </div>
   )

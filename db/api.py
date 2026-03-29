@@ -1080,6 +1080,9 @@ async def sync_drive_files(authorization: Optional[str] = Header(None)):
                     pageSize=200,
                     fields="nextPageToken, files(id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink)",
                     pageToken=page_token,
+                    corpora="allDrives",
+                    includeItemsFromAllDrives=True,
+                    supportsAllDrives=True,
                 ).execute()
 
                 for item in result.get("files", []):
