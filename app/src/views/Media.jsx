@@ -66,12 +66,13 @@ function SkeletonCard() {
 
 // ─── Article Card ────────────────────────────────────────────────────────────
 
-function ArticleCard({ article, onDelete }) {
+function ArticleCard({ article, onDelete, onViewCached }) {
   const [hovered, setHovered]           = useState(false)
   const [deleteHovered, setDeleteHovered] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [yesHovered, setYesHovered]     = useState(false)
   const [noHovered, setNoHovered]       = useState(false)
+  const [cachedHovered, setCachedHovered] = useState(false)
 
   const handleDeleteClick = () => setConfirmDelete(true)
   const handleNo          = () => setConfirmDelete(false)
@@ -190,25 +191,47 @@ function ArticleCard({ article, onDelete }) {
 
         {/* Footer row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
-          <a
-            href={article.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              fontSize: 13,
-              color: '#a89fff',
-              textDecoration: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              fontWeight: 500,
-              transition: 'color 0.12s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.color = '#c4b5fd'}
-            onMouseLeave={e => e.currentTarget.style.color = '#a89fff'}
-          >
-            ↗ Read article
-          </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <a
+              href={article.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: 13,
+                color: '#a89fff',
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontWeight: 500,
+                transition: 'color 0.12s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#c4b5fd'}
+              onMouseLeave={e => e.currentTarget.style.color = '#a89fff'}
+            >
+              ↗ Read article
+            </a>
+            <button
+              onMouseEnter={() => setCachedHovered(true)}
+              onMouseLeave={() => setCachedHovered(false)}
+              onClick={() => onViewCached(article)}
+              style={{
+                background: cachedHovered ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'rgba(255,255,255,0.6)',
+                borderRadius: 7,
+                padding: '5px 10px',
+                fontSize: 12,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                transition: 'background 0.12s',
+              }}
+            >
+              📄 Cached
+            </button>
+          </div>
 
           {/* Delete / Confirm */}
           {confirmDelete ? (
@@ -276,19 +299,148 @@ function ArticleCard({ article, onDelete }) {
   )
 }
 
+// ─── Cached Article Panel ────────────────────────────────────────────────────
+
+function CachedArticlePanel({ article, onClose }) {
+  const [content, setContent] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    requestAnimationFrame(() => setVisible(true))
+  }, [])
+
+  useEffect(() => {
+    mediaFetch(`/media/articles/${article.id}`)
+      .then(r => r.json())
+      .then(data => {
+        setContent(data.content || null)
+        setLoading(false)
+      })
+      .catch(() => {
+        setError('Failed to load cached content')
+        setLoading(false)
+      })
+  }, [article.id])
+
+  return (
+    <>
+      {/* Dark overlay */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          zIndex: 900, backdropFilter: 'blur(2px)',
+        }}
+      />
+      {/* Panel */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0,
+        width: 'min(680px, 100vw)',
+        background: 'rgba(16,16,28,0.98)',
+        borderLeft: '1px solid rgba(255,255,255,0.1)',
+        zIndex: 901,
+        display: 'flex', flexDirection: 'column',
+        backdropFilter: 'blur(20px)',
+        transform: visible ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.25s cubic-bezier(0.32, 0.72, 0, 1)',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '20px 24px 16px',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {article.publication && (
+                <div style={{ fontSize: 11, color: '#7c6af7', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                  {article.publication}{article.published_date ? ` · ${formatDate(article.published_date)}` : ''}
+                </div>
+              )}
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#fff', lineHeight: 1.35 }}>
+                {article.title}
+              </div>
+              {article.author && (
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 6 }}>
+                  By {article.author}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff',
+                width: 32, height: 32, borderRadius: '50%', cursor: 'pointer',
+                fontSize: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >×</button>
+          </div>
+          {/* Link to original */}
+          <a
+            href={article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 12, color: '#7c6af7', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 10 }}
+          >
+            ↗ View original article
+          </a>
+        </div>
+
+        {/* Content area */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+          {loading && (
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Loading cached content…</div>
+          )}
+          {error && (
+            <div style={{ color: '#f87171', fontSize: 14 }}>{error}</div>
+          )}
+          {!loading && !error && !content && (
+            <div style={{
+              textAlign: 'center', padding: '48px 24px',
+              color: 'rgba(255,255,255,0.3)', fontSize: 14,
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📄</div>
+              No cached content available for this article.
+              <br />
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>
+                Articles added before this feature was enabled may not have cached text.
+              </span>
+            </div>
+          )}
+          {!loading && content && (
+            <div style={{
+              fontSize: 15,
+              lineHeight: 1.75,
+              color: 'rgba(255,255,255,0.82)',
+              fontFamily: 'Georgia, "Times New Roman", serif',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}>
+              {content}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function Media() {
   const isMobile = useIsMobile()
 
-  const [articles, setArticles]     = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [urlInput, setUrlInput]     = useState('')
-  const [adding, setAdding]         = useState(false)
-  const [addError, setAddError]     = useState('')
-  const [search, setSearch]         = useState('')
-  const [sort, setSort]             = useState('newest')
-  const debounceRef                 = useRef(null)
+  const [articles, setArticles]       = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [urlInput, setUrlInput]       = useState('')
+  const [adding, setAdding]           = useState(false)
+  const [addError, setAddError]       = useState('')
+  const [search, setSearch]           = useState('')
+  const [sort, setSort]               = useState('newest')
+  const [viewingArticle, setViewingArticle] = useState(null)
+  const debounceRef                   = useRef(null)
 
   // ── Fetch articles ──────────────────────────────────────────────────────
 
@@ -580,9 +732,17 @@ export default function Media() {
               key={article.id}
               article={article}
               onDelete={handleDelete}
+              onViewCached={setViewingArticle}
             />
           ))}
         </div>
+      )}
+
+      {viewingArticle && (
+        <CachedArticlePanel
+          article={viewingArticle}
+          onClose={() => setViewingArticle(null)}
+        />
       )}
     </div>
   )

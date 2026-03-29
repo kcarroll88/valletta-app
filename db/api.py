@@ -2175,24 +2175,66 @@ def _scrape_article(url: str) -> dict:
             self.meta = {}
             self.title = None
             self._in_title = False
+            # Content extraction
+            self._skip_tags = {'script', 'style', 'nav', 'header', 'footer',
+                               'aside', 'form', 'noscript', 'iframe', 'svg'}
+            self._content_tags = {'p', 'article', 'section', 'blockquote',
+                                  'h1', 'h2', 'h3', 'h4', 'li'}
+            self._skip_depth = 0
+            self._in_content = 0
+            self._paragraphs = []
+            self._current_para = []
 
         def handle_starttag(self, tag, attrs):
-            attrs = dict(attrs)
-            if tag == "title":
+            attrs_dict = dict(attrs)
+            if tag == 'title':
                 self._in_title = True
-            if tag == "meta":
-                prop = attrs.get("property") or attrs.get("name") or ""
-                content = attrs.get("content", "")
+            if tag == 'meta':
+                prop = attrs_dict.get('property') or attrs_dict.get('name') or ''
+                content = attrs_dict.get('content', '')
                 if prop and content:
                     self.meta[prop.lower()] = content
+            # Skip noise
+            if tag in self._skip_tags:
+                self._skip_depth += 1
+            # Track content tags
+            if tag in self._content_tags and self._skip_depth == 0:
+                self._in_content += 1
+
+        def handle_endtag(self, tag):
+            if tag == 'title':
+                self._in_title = False
+            if tag in self._skip_tags and self._skip_depth > 0:
+                self._skip_depth -= 1
+            if tag in self._content_tags and self._in_content > 0:
+                self._in_content -= 1
+                # Flush current paragraph
+                text = ' '.join(self._current_para).strip()
+                if len(text) > 40:  # skip very short fragments
+                    self._paragraphs.append(text)
+                self._current_para = []
 
         def handle_data(self, data):
             if self._in_title and not self.title:
                 self.title = data.strip()
+            if self._skip_depth == 0 and self._in_content > 0:
+                cleaned = data.strip()
+                if cleaned:
+                    self._current_para.append(cleaned)
 
-        def handle_endtag(self, tag):
-            if tag == "title":
-                self._in_title = False
+        def get_content(self):
+            # Flush any remaining paragraph
+            text = ' '.join(self._current_para).strip()
+            if len(text) > 40:
+                self._paragraphs.append(text)
+            # Deduplicate while preserving order, join with newlines
+            seen = set()
+            unique = []
+            for p in self._paragraphs:
+                if p not in seen:
+                    seen.add(p)
+                    unique.append(p)
+            return '\n\n'.join(unique)
 
     try:
         resp = httpx.get(
@@ -2249,6 +2291,11 @@ def _scrape_article(url: str) -> dict:
     if published_date and "T" in published_date:
         published_date = published_date.split("T")[0]
 
+    content = parser.get_content()
+    # Cap at 50,000 chars to keep DB size reasonable
+    if len(content) > 50_000:
+        content = content[:50_000] + '\n\n[Content truncated]'
+
     return {
         "title": title[:500] if title else None,
         "author": author[:200] if author else None,
@@ -2256,6 +2303,7 @@ def _scrape_article(url: str) -> dict:
         "published_date": published_date,
         "summary": summary[:1000] if summary else None,
         "image_url": image_url[:500] if image_url else None,
+        "content": content or None,
     }
 
 
@@ -2285,10 +2333,11 @@ def create_media_article(body: MediaArticleCreate, authorization: Optional[str] 
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO media_articles
-               (url, title, author, publication, published_date, summary, image_url, scraped_at, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+               (url, title, author, publication, published_date, summary, image_url, content, scraped_at, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (url, meta["title"], meta["author"], meta["publication"],
-             meta["published_date"], meta["summary"], meta["image_url"], ts, ts)
+             meta["published_date"], meta["summary"], meta["image_url"],
+             meta.get("content"), ts, ts)
         )
         conn.commit()
         row = conn.execute("SELECT * FROM media_articles WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -2317,6 +2366,15 @@ def list_media_articles(
     with get_db() as conn:
         rows = conn.execute(sql, params).fetchall()
     return [row_to_dict(r) for r in rows]
+
+@app.get("/api/media/articles/{article_id}")
+def get_media_article(article_id: int, authorization: Optional[str] = Header(None)):
+    _require_auth(authorization)
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM media_articles WHERE id = ?", (article_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Article not found")
+    return row_to_dict(row)
 
 @app.delete("/api/media/articles/{article_id}", status_code=204)
 def delete_media_article(article_id: int, authorization: Optional[str] = Header(None)):

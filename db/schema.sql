@@ -428,6 +428,7 @@ CREATE TABLE IF NOT EXISTS media_articles (
     publication     TEXT,       -- e.g. "Rolling Stone", "Pitchfork"
     published_date  TEXT,       -- ISO date string from article metadata
     summary         TEXT,       -- og:description or first paragraph
+    content         TEXT,       -- full article body text (plain text, stripped of HTML)
     image_url       TEXT,       -- og:image
     scraped_at      TEXT NOT NULL DEFAULT (datetime('now')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
