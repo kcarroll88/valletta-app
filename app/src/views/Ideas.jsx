@@ -472,9 +472,9 @@ export default function Ideas() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, ...(isMobile && { paddingTop: 52 }) }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, ...(isMobile && { paddingTop: 'env(safe-area-inset-top, 0px)' }) }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Ideas</h1>
+          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Ideas</h1>
           <p style={{ color: 'rgba(255,255,255,0.45)', marginTop: 6, fontSize: 14 }}>
             {tab === 'inbox' ? `${ideas.length} inbox idea${ideas.length !== 1 ? 's' : ''}` : tab === 'open' ? `${openCount} open idea${openCount !== 1 ? 's' : ''}` : `${ideas.length} archived`}
           </p>

@@ -263,7 +263,9 @@ function ShowsTable({ shows }) {
         fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase',
         color: 'rgba(255,255,255,0.35)', marginBottom: 16,
       }}>Shows</div>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      {/* Horizontal scroll on mobile with fade gradient indicator */}
+      <div className="table-scroll-container">
+      <table style={{ width: '100%', minWidth: 480, borderCollapse: 'collapse' }}>
         <thead>
           <tr>
             <th style={thStyle}>Show</th>
@@ -307,6 +309,7 @@ function ShowsTable({ shows }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -414,7 +417,8 @@ function RawEntriesTable({ entries }) {
       </div>
 
       {!collapsed && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-scroll-container">
+        <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               <th style={thStyle}>Tab</th>
@@ -453,6 +457,7 @@ function RawEntriesTable({ entries }) {
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )
@@ -495,13 +500,18 @@ export default function Finance({ onNavigate }) {
   const displayYears = years.length > 0 ? years : [2024, 2025]
 
   return (
-    <div style={{ padding: isMobile ? '16px 16px' : '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{
+      padding: isMobile ? '16px 16px' : '32px 40px',
+      paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top, 0px))' : '32px',
+      maxWidth: 1200, margin: '0 auto',
+    }}>
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 0, justifyContent: 'space-between', marginBottom: 32 }}>
         <div>
           <h1 style={{
-            fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', margin: 0,
+            // 22px on mobile, 28px on desktop
+            fontSize: isMobile ? 22 : 28, fontWeight: 700, letterSpacing: '-0.02em', margin: 0,
             background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
           }}>

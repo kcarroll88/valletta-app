@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { api } from '../api'
 import useIsMobile from '../hooks/useIsMobile'
 
@@ -430,13 +430,21 @@ function CompanyDetailModal({ source, contacts = [], onClose, onStatusChange, on
           width: '100%',
           maxHeight: '90vh',
           overflowY: 'auto',
-          background: 'rgba(12,12,20,0.95)',
+          background: 'rgba(12,12,20,0.97)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
-          borderTop: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: '16px 16px 0 0',
+          border: '1px solid rgba(255,255,255,0.12)',
+          // iOS standard: 20px top radius
+          borderRadius: '20px 20px 0 0',
+          boxShadow: '0 -8px 40px rgba(0,0,0,0.5)',
           display: 'flex',
           flexDirection: 'column',
+          // iOS spring physics transition
+          transition: 'transform 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch',
+          // Safe area for home indicator
+          paddingBottom: 'env(safe-area-inset-bottom, 16px)',
         } : {
           width: 520,
           maxWidth: '95vw',
@@ -451,8 +459,14 @@ function CompanyDetailModal({ source, contacts = [], onClose, onStatusChange, on
         }}
       >
         {/* Header */}
-        <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, background: 'rgba(12,12,20,0.90)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', zIndex: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, background: 'rgba(12,12,20,0.90)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', zIndex: 10, borderRadius: isMobile ? '20px 20px 0 0' : 0 }}>
+          {/* Drag handle pill — iOS standard */}
+          {isMobile && (
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4 }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
+            </div>
+          )}
+          <div style={{ padding: isMobile ? '12px 20px 20px' : '24px 28px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <h2 style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,0.88)', margin: '0 0 6px', lineHeight: 1.2 }}>
                 {source.title}
@@ -467,10 +481,21 @@ function CompanyDetailModal({ source, contacts = [], onClose, onStatusChange, on
                 <CompanyCatBadge cat={cat} />
               </div>
             </div>
+            {/* 44×44 touch target on mobile */}
             <button onClick={onClose}
-              style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.30)', cursor: 'pointer', fontSize: 22, lineHeight: 1, flexShrink: 0, marginTop: -2, padding: '2px 4px' }}
+              style={{
+                background: isMobile ? 'rgba(255,255,255,0.07)' : 'transparent',
+                border: isMobile ? '1px solid rgba(255,255,255,0.10)' : 'none',
+                borderRadius: isMobile ? 8 : 0,
+                color: 'rgba(255,255,255,0.55)', cursor: 'pointer', fontSize: 20, lineHeight: 1, flexShrink: 0,
+                // 44×44 on mobile
+                minWidth: isMobile ? 44 : 'auto',
+                minHeight: isMobile ? 44 : 'auto',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'color 0.12s',
+              }}
               onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.88)' }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.30)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}
             >×</button>
           </div>
 
@@ -1215,6 +1240,7 @@ function ConfirmDeleteModal({ label, onCancel, onConfirm }) {
 // ─── Person Detail Modal ──────────────────────────────────────────────────────
 
 function PersonDetailModal({ contact, onClose, onStatusChange, onEdit, onDelete }) {
+  const isMobile = useIsMobile()
   const [outreach,   setOutreach]   = useState([])
   const [loadingLog, setLoadingLog] = useState(true)
   const [status,     setStatus]     = useState(contact.outreach_status || 'not_contacted')
@@ -1253,7 +1279,7 @@ function PersonDetailModal({ contact, onClose, onStatusChange, onEdit, onDelete 
   })
 
   return (
-    <>
+    <React.Fragment>
       {showDelete && (
         <ConfirmDeleteModal
           label={contact.name}
@@ -1263,17 +1289,48 @@ function PersonDetailModal({ contact, onClose, onStatusChange, onEdit, onDelete 
       )}
 
       <div
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', zIndex: 200 }}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: isMobile ? 'flex-end' : 'flex-start',
+          justifyContent: isMobile ? 'stretch' : 'flex-end',
+          zIndex: 200,
+        }}
         onClick={onClose}
       >
         <div
           onClick={e => e.stopPropagation()}
-          style={{ width: 540, maxWidth: '95vw', height: '100vh', overflowY: 'auto', background: 'rgba(12,12,20,0.85)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderLeft: '1px solid rgba(255,255,255,0.10)', display: 'flex', flexDirection: 'column' }}
+          className={isMobile ? 'ios-sheet-enter' : ''}
+          style={isMobile ? {
+            width: '100%', maxHeight: '90vh', overflowY: 'auto',
+            background: 'rgba(12,12,20,0.97)',
+            backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: '20px 20px 0 0',
+            boxShadow: '0 -8px 40px rgba(0,0,0,0.5)',
+            display: 'flex', flexDirection: 'column',
+            transition: 'transform 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            paddingBottom: 'env(safe-area-inset-bottom, 16px)',
+          } : {
+            width: 540, maxWidth: '95vw', height: '100vh', overflowY: 'auto',
+            background: 'rgba(12,12,20,0.85)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+            borderLeft: '1px solid rgba(255,255,255,0.10)',
+            display: 'flex', flexDirection: 'column',
+          }}
         >
           {/* Header */}
-          <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, background: 'rgba(12,12,20,0.90)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', zIndex: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, background: 'rgba(12,12,20,0.90)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', zIndex: 10, borderRadius: isMobile ? '20px 20px 0 0' : 0 }}>
+            {/* Drag handle pill — iOS standard */}
+            {isMobile && (
+              <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4 }}>
+                <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
+              </div>
+            )}
+            <div style={{ padding: isMobile ? '12px 20px 20px' : '24px 28px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
                 <h2 style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,0.88)', margin: '0 0 4px', lineHeight: 1.2 }}>
                   {contact.name}
                 </h2>
@@ -1310,15 +1367,30 @@ function PersonDetailModal({ contact, onClose, onStatusChange, onEdit, onDelete 
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, marginTop: -2 }}>
                 <button onClick={() => onEdit(contact)}
-                  style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 6, color: 'rgba(255,255,255,0.45)', cursor: 'pointer', fontSize: 12, padding: '4px 10px', transition: 'all 0.12s' }}
+                  style={{
+                    background: 'transparent', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 6,
+                    color: 'rgba(255,255,255,0.45)', cursor: 'pointer', fontSize: 12,
+                    padding: isMobile ? '4px 12px' : '4px 10px',
+                    minHeight: isMobile ? 36 : 'auto',
+                    transition: 'all 0.12s',
+                  }}
                   onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.88)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)' }}
                   onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)' }}>
                   Edit
                 </button>
+                {/* 44×44 touch target on mobile */}
                 <button onClick={onClose}
-                  style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.30)', cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: '2px 4px', transition: 'color 0.12s' }}
+                  style={{
+                    background: isMobile ? 'rgba(255,255,255,0.07)' : 'transparent',
+                    border: isMobile ? '1px solid rgba(255,255,255,0.10)' : 'none',
+                    borderRadius: isMobile ? 8 : 0,
+                    color: 'rgba(255,255,255,0.55)', cursor: 'pointer', fontSize: 20, lineHeight: 1,
+                    minWidth: isMobile ? 44 : 'auto', minHeight: isMobile ? 44 : 'auto',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'color 0.12s',
+                  }}
                   onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.88)' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.30)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}
                   title="Close">
                   ×
                 </button>
@@ -1399,7 +1471,7 @@ function PersonDetailModal({ contact, onClose, onStatusChange, onEdit, onDelete 
           </div>
         </div>
       </div>
-    </>
+    </React.Fragment>
   )
 }
 
@@ -1866,8 +1938,8 @@ export default function Contacts() {
   return (
     <div style={{ padding: isMobile ? '16px 14px' : '32px 36px', minHeight: '100vh' }}>
       {/* Page header */}
-      <div style={{ marginBottom: 24, ...(isMobile && { paddingTop: 52 }) }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+      <div style={{ marginBottom: 24, ...(isMobile && { paddingTop: 'env(safe-area-inset-top, 0px)' }) }}>
+        <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
           Contacts
         </h1>
       </div>

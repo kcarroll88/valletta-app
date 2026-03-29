@@ -47,6 +47,8 @@ function NavItem({ id, label, icon, isActive, isTeam, onClick }) {
         alignItems: 'center',
         gap: 10,
         width: '100%',
+        // 44px min height for Apple HIG compliance in the mobile slide-in
+        minHeight: 44,
         padding: '10px 24px',
         background: isActive ? 'rgba(124,106,247,0.15)' : hovered ? 'rgba(255,255,255,0.05)' : 'transparent',
         borderLeft: isActive ? '2px solid #a89fff' : '2px solid transparent',
@@ -109,7 +111,10 @@ export default function Sidebar({ active, onNav, onLogout, onChatOpen, isMobile,
     zIndex: 1000,
     width: 280,
     transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
-    transition: 'transform 0.25s ease',
+    transition: 'transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
+    // Safe area: notch / Dynamic Island at top, home indicator at bottom
+    paddingTop: 'env(safe-area-inset-top, 0px)',
+    paddingBottom: 'env(safe-area-inset-bottom, 16px)',
   } : {}
 
   return (
@@ -152,14 +157,19 @@ export default function Sidebar({ active, onNav, onLogout, onChatOpen, isMobile,
           <button
             onClick={() => setSidebarOpen(false)}
             style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'rgba(255,255,255,0.55)',
-              fontSize: 20,
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: 8,
+              color: 'rgba(255,255,255,0.65)',
+              fontSize: 16,
               cursor: 'pointer',
-              padding: '0 4px',
-              lineHeight: 1,
-              marginTop: 2,
+              // Apple HIG: 44×44 minimum touch target
+              width: 44,
+              height: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
             }}
             aria-label="Close menu"
           >

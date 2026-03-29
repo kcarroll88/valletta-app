@@ -902,7 +902,11 @@ export default function Dashboard({ onNavigate }) {
           {/* Header */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: isMobile ? '14px 24px 14px 64px' : '14px 24px',
+            padding: '14px 24px',
+            // Safe area: notch / Dynamic Island clearance on mobile
+            paddingTop: isMobile
+              ? 'calc(14px + env(safe-area-inset-top, 0px))'
+              : '14px',
             borderBottom: '1px solid rgba(255,255,255,0.06)',
             flexShrink: 0,
             background: 'rgba(10,10,18,0.70)',
@@ -964,7 +968,7 @@ export default function Dashboard({ onNavigate }) {
 
           {/* Messages */}
           <div
-            className="dc-scroll"
+            className="dc-scroll scroll-momentum"
             onScroll={handleScroll}
             style={{
               flex: 1,
@@ -973,6 +977,9 @@ export default function Dashboard({ onNavigate }) {
               display: 'flex',
               flexDirection: 'column',
               gap: 4,
+              // Contain overscroll so background doesn't pull
+              overscrollBehavior: 'contain',
+              WebkitOverflowScrolling: 'touch',
             }}
           >
             {messages.length === 0 && (
@@ -1091,16 +1098,21 @@ export default function Dashboard({ onNavigate }) {
                       )}
                       <div style={{
                         maxWidth: isMobile ? '85vw' : 560,
-                        background: 'linear-gradient(135deg, rgba(124,106,247,0.25) 0%, rgba(99,102,241,0.20) 100%)',
-                        border: '1px solid rgba(124,106,247,0.35)',
+                        // iOS iMessage style: solid purple fill on mobile, glass on desktop
+                        background: isMobile
+                          ? 'linear-gradient(135deg, #7c6af7, #5b52d6)'
+                          : 'linear-gradient(135deg, rgba(124,106,247,0.25) 0%, rgba(99,102,241,0.20) 100%)',
+                        border: isMobile ? 'none' : '1px solid rgba(124,106,247,0.35)',
                         borderRadius: '18px 18px 4px 18px',
-                        boxShadow: '0 4px 20px rgba(124,106,247,0.15)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        padding: '10px 14px',
-                        fontSize: 13.5,
-                        color: 'rgba(255,255,255,0.88)',
-                        lineHeight: 1.6,
+                        boxShadow: isMobile
+                          ? '0 2px 12px rgba(124,106,247,0.35)'
+                          : '0 4px 20px rgba(124,106,247,0.15)',
+                        backdropFilter: isMobile ? 'none' : 'blur(8px)',
+                        WebkitBackdropFilter: isMobile ? 'none' : 'blur(8px)',
+                        padding: isMobile ? '12px 16px' : '10px 14px',
+                        fontSize: isMobile ? 15 : 13.5,
+                        color: isMobile ? '#fff' : 'rgba(255,255,255,0.88)',
+                        lineHeight: isMobile ? 1.5 : 1.6,
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                       }}>
@@ -1164,16 +1176,21 @@ export default function Dashboard({ onNavigate }) {
                       </div>
                       <div style={{
                         maxWidth: isMobile ? '90vw' : 640,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: `1px solid ${m.error ? '#f8717144' : 'rgba(255,255,255,0.09)'}`,
+                        // iOS iMessage style: more prominent glass on mobile
+                        background: isMobile
+                          ? 'rgba(255,255,255,0.07)'
+                          : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${m.error ? '#f8717144' : isMobile ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.09)'}`,
                         borderRadius: '4px 18px 18px 18px',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)',
+                        boxShadow: isMobile
+                          ? '0 2px 8px rgba(0,0,0,0.3)'
+                          : '0 4px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)',
                         backdropFilter: 'blur(8px)',
                         WebkitBackdropFilter: 'blur(8px)',
-                        padding: '10px 14px',
-                        fontSize: 13.5,
+                        padding: isMobile ? '12px 16px' : '10px 14px',
+                        fontSize: isMobile ? 15 : 13.5,
                         color: m.error ? '#f87171' : 'rgba(255,255,255,0.88)',
-                        lineHeight: 1.6,
+                        lineHeight: isMobile ? 1.5 : 1.6,
                         wordBreak: 'break-word',
                       }}>
                         {m.text ? (
@@ -1201,7 +1218,11 @@ export default function Dashboard({ onNavigate }) {
           {/* ── Input Bar ─────────────────────────────────────────────────── */}
           <div style={{
             borderTop: '1px solid rgba(255,255,255,0.06)',
-            padding: isMobile ? '10px 12px 12px' : '12px 24px 16px',
+            padding: '12px 24px 16px',
+            // On mobile: account for the BottomNav (50px) + home indicator safe area
+            paddingBottom: isMobile
+              ? 'calc(16px + env(safe-area-inset-bottom, 16px))'
+              : '16px',
             flexShrink: 0,
             background: 'rgba(10,10,18,0.70)',
             backdropFilter: 'blur(16px)',
@@ -1263,24 +1284,28 @@ export default function Dashboard({ onNavigate }) {
                 }}
               />
 
-              {/* Attach button */}
+              {/* Attach button — 44×44 on mobile */}
               <button
                 className="dc-attach-btn"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
                 title="Attach file"
                 style={{
-                  width: 24, height: 24,
+                  // Apple HIG: 44pt minimum touch target on mobile
+                  width: isMobile ? 44 : 24,
+                  height: isMobile ? 44 : 24,
+                  minWidth: isMobile ? 44 : 24,
+                  minHeight: isMobile ? 44 : 24,
                   background: uploading ? 'rgba(124,106,247,0.15)' : 'rgba(255,255,255,0.06)',
                   border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 6,
+                  borderRadius: isMobile ? 10 : 6,
                   color: uploading ? '#a89fff' : 'rgba(255,255,255,0.45)',
-                  fontSize: 14,
+                  fontSize: isMobile ? 18 : 14,
                   cursor: uploading ? 'default' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,
                   alignSelf: 'flex-end',
-                  marginBottom: 5,
+                  marginBottom: isMobile ? 0 : 5,
                   transition: 'background 0.15s, color 0.15s, border-color 0.15s',
                   animation: uploading ? 'dc-upload-pulse 1.2s ease-in-out infinite' : 'none',
                   backdropFilter: 'blur(8px)',
@@ -1296,7 +1321,7 @@ export default function Dashboard({ onNavigate }) {
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask the team anything… (Enter to send, Shift+Enter for new line)"
+                placeholder="Ask the team anything…"
                 disabled={loading}
                 rows={1}
                 style={{
@@ -1306,12 +1331,14 @@ export default function Dashboard({ onNavigate }) {
                   borderRadius: 8,
                   color: 'rgba(255,255,255,0.88)',
                   padding: '6px 4px',
-                  fontSize: 13.5,
+                  // 16px prevents iOS auto-zoom when tapping input
+                  fontSize: isMobile ? 16 : 13.5,
                   resize: 'none',
                   fontFamily: 'inherit',
                   lineHeight: '22px',
                   overflowY: 'hidden',
-                  minHeight: 34,
+                  // Apple HIG: 44pt minimum touch target height
+                  minHeight: isMobile ? 44 : 34,
                   maxHeight: 120,
                   transition: 'border-color 0.15s',
                 }}
@@ -1327,7 +1354,11 @@ export default function Dashboard({ onNavigate }) {
                   borderRadius: 10,
                   boxShadow: (loading || !input.trim()) ? 'none' : '0 4px 16px rgba(124,106,247,0.25), inset 0 1px 0 rgba(255,255,255,0.15)',
                   color: (loading || !input.trim()) ? 'rgba(255,255,255,0.25)' : '#fff',
-                  width: 36, height: 36,
+                  // 44×44 on mobile for Apple HIG compliance
+                  width: isMobile ? 44 : 36,
+                  height: isMobile ? 44 : 36,
+                  minWidth: isMobile ? 44 : 36,
+                  minHeight: isMobile ? 44 : 36,
                   fontSize: 16,
                   cursor: (loading || !input.trim()) ? 'default' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',

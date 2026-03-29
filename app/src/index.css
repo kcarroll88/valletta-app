@@ -19,14 +19,23 @@ body {
 
 /* ── Mobile Base ── */
 @media (max-width: 767px) {
-  /* Ensure full-width scrolling */
-  * { box-sizing: border-box; }
+  /* Normalize */
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
   /* Prevent horizontal overflow at root */
   #root { overflow-x: hidden; }
 
-  /* Touch-friendly minimum tap targets */
-  button { min-height: 36px; }
+  /* Prevent iOS auto-zoom on inputs — CRITICAL */
+  input, textarea, select { font-size: 16px !important; }
+
+  /* Touch-friendly minimum tap targets — Apple HIG 44pt */
+  button { min-height: 44px; cursor: pointer; }
+
+  /* Filter pills: Apple HIG compliant */
+  .filter-pill {
+    min-height: 44px !important;
+    padding: 8px 14px !important;
+  }
 
   /* Prevent text overflow */
   .mobile-truncate {
@@ -42,12 +51,6 @@ body {
     justify-content: flex-end;
   }
 
-  /* Filter pills: ensure touch-friendly */
-  .filter-pill {
-    min-height: 36px !important;
-    padding: 6px 12px !important;
-  }
-
   /* Setlist song row: stack title and notes on mobile */
   .song-row-inner {
     flex-wrap: wrap !important;
@@ -56,4 +59,55 @@ body {
     flex: 1 1 100% !important;
     min-width: 0 !important;
   }
+
+  /* Native-feel momentum scrolling for all scroll containers */
+  .scroll-momentum,
+  .scroll-container {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Modals / sheets: contain scroll so background doesn't pull */
+  .mobile-sheet {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Finance tables: horizontal scroll with momentum */
+  .table-scroll-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    position: relative;
+  }
+
+  /* Fade gradient on right edge of horizontally scrollable tables */
+  .table-scroll-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40px;
+    height: 100%;
+    background: linear-gradient(to right, transparent, rgba(15,15,22,0.85));
+    pointer-events: none;
+    border-radius: 0 12px 12px 0;
+  }
+}
+
+/* ── Safe area support ── */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-top    { padding-top:    env(safe-area-inset-top,    0px); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 16px); }
+  .safe-left   { padding-left:   env(safe-area-inset-left,   0px); }
+  .safe-right  { padding-right:  env(safe-area-inset-right,  0px); }
+}
+
+/* ── iOS sheet spring animation ── */
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.ios-sheet-enter {
+  animation: sheet-slide-up 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }

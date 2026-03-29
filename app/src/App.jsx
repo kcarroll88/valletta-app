@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from './api'
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
+import BottomNav from './components/BottomNav'
 import useIsMobile from './hooks/useIsMobile'
 import GlobalChat from './components/GlobalChat'
 import Dashboard from './views/Dashboard'
@@ -133,65 +134,25 @@ export default function App() {
 
       <main
         className="flex-1 overflow-auto"
-        style={{ minWidth: 0, ...(isMobile && { marginLeft: 0 }) }}
+        style={{
+          minWidth: 0,
+          ...(isMobile && {
+            marginLeft: 0,
+            // Push content above the bottom nav bar (50px) + safe area
+            paddingBottom: 'calc(50px + env(safe-area-inset-bottom, 16px))',
+          }),
+        }}
       >
-        {/* Mobile hamburger button */}
-        {isMobile && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            style={{
-              position: 'fixed',
-              top: 12,
-              left: 12,
-              zIndex: 998,
-              width: 40,
-              height: 40,
-              background: 'rgba(15,15,22,0.90)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 10,
-              color: 'rgba(255,255,255,0.75)',
-              fontSize: 18,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-            }}
-            aria-label="Open menu"
-          >
-            ☰
-          </button>
-        )}
         <View key={view === 'ideas' ? ideasRefreshKey : undefined} onNavigate={navigateTo} />
       </main>
-      {/* Mobile floating chat trigger — bottom-right so it doesn't clash with the top-left hamburger */}
-      {isMobile && !chatOpen && (
-        <button
-          onClick={() => setChatOpen(true)}
-          style={{
-            position: 'fixed',
-            bottom: 20,
-            right: 16,
-            zIndex: 997,
-            width: 48,
-            height: 48,
-            background: 'linear-gradient(135deg, #7c6af7, #5b52d6)',
-            border: 'none',
-            borderRadius: '50%',
-            color: '#fff',
-            fontSize: 20,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 20px rgba(124,106,247,0.45)',
-          }}
-          aria-label="Open team chat"
-        >
-          ◈
-        </button>
+
+      {/* Bottom tab bar — mobile only, replaces the hamburger pattern */}
+      {isMobile && (
+        <BottomNav
+          activeView={view}
+          onNav={navigateTo}
+          onMoreOpen={() => setSidebarOpen(true)}
+        />
       )}
 
       <GlobalChat

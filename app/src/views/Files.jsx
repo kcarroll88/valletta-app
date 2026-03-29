@@ -446,10 +446,10 @@ export default function Files() {
     <div style={{ padding: isMobile ? '16px 14px' : '32px 40px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexShrink: 0, ...(isMobile && { paddingTop: 52 }) }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexShrink: 0, ...(isMobile && { paddingTop: 'env(safe-area-inset-top, 0px)' }) }}>
         <div>
           <h1 style={{
-            fontSize: 28,
+            fontSize: isMobile ? 22 : 28,
             fontWeight: 700,
             margin: 0,
             background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)',

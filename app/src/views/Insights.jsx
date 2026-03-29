@@ -843,10 +843,10 @@ export default function Insights({ onNavigate }) {
     <div style={{ padding: isMobile ? '16px 14px' : '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
 
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'flex-start', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 0, justifyContent: 'space-between', marginBottom: 32, ...(isMobile && { paddingTop: 52 }) }}>
+      <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'flex-start', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 0, justifyContent: 'space-between', marginBottom: 32, ...(isMobile && { paddingTop: 'env(safe-area-inset-top, 0px)' }) }}>
         <div>
           <h1 style={{
-            fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', margin: 0,
+            fontSize: isMobile ? 22 : 28, fontWeight: 700, letterSpacing: '-0.02em', margin: 0,
             background: 'linear-gradient(135deg, #ffffff 0%, #a89fff 100%)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
           }}>

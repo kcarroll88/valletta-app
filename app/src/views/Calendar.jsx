@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import useIsMobile from '../hooks/useIsMobile'
 
+// ─── iOS Sheet helpers ────────────────────────────────────────────────────────
+
+function DragHandle() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4 }}>
+      <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
+    </div>
+  )
+}
+
 const TYPE_COLOR = {
   show: '#a89fff', rehearsal: '#4ade80', recording: '#fbbf24',
   press: '#f472b6', deadline: '#f87171', meeting: '#60a5fa', other: '#9595b8',
@@ -92,6 +102,7 @@ function fmtDateTime(iso) {
 }
 
 function EventModal({ initial, onClose, onSave, onDelete }) {
+  const isMobile = useIsMobile()
   // Derive initial date/time parts from existing start_dt if editing
   const initDate = () => {
     if (initial?.start_dt) return initial.start_dt.slice(0, 10)
@@ -155,10 +166,41 @@ function EventModal({ initial, onClose, onSave, onDelete }) {
 
   const labelStyle = { fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.40)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }
 
+  const mobileSheetOverlayStyle = {
+    position: 'fixed', inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    backdropFilter: 'blur(4px)',
+    WebkitBackdropFilter: 'blur(4px)',
+    display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+    zIndex: 100,
+  }
+  const mobileSheetStyle = {
+    width: '100%',
+    maxHeight: '90vh',
+    background: 'rgba(22,22,32,0.97)',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: '20px 20px 0 0',
+    boxShadow: '0 -8px 40px rgba(0,0,0,0.5)',
+    padding: '0 24px',
+    paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 16px))',
+    overflowY: 'auto',
+    transition: 'transform 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
+    overscrollBehavior: 'contain',
+    WebkitOverflowScrolling: 'touch',
+  }
+
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={{ ...modalStyle, width: 'min(480px, 94vw)' }} onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.88)', margin: '0 0 20px' }}>
+    <div style={isMobile ? mobileSheetOverlayStyle : overlayStyle} onClick={onClose}>
+      <div
+        className={isMobile ? 'ios-sheet-enter' : ''}
+        style={isMobile ? mobileSheetStyle : { ...modalStyle, width: 'min(480px, 94vw)' }}
+        onClick={e => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
+      >
+        {isMobile && <DragHandle />}
+        <h3 style={{ fontSize: isMobile ? 18 : 16, fontWeight: isMobile ? 700 : 600, color: 'rgba(255,255,255,0.88)', margin: isMobile ? '16px 0 20px' : '0 0 20px', letterSpacing: isMobile ? '-0.01em' : 'normal' }}>
           {isEdit ? 'Edit Event' : 'New Event'}
         </h3>
 
@@ -286,9 +328,9 @@ function EventModal({ initial, onClose, onSave, onDelete }) {
           ) : (
             <div />
           )}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={onClose} style={cancelBtnStyle} disabled={saving}>Cancel</button>
-            <button onClick={handleSubmit} style={{ ...saveBtnStyle, opacity: saving ? 0.65 : 1 }} disabled={saving}>
+          <div style={{ display: 'flex', gap: 10, ...(isMobile && { flexDirection: 'row' }) }}>
+            <button onClick={onClose} style={{ ...cancelBtnStyle, ...(isMobile && { flex: 1, minHeight: 44 }) }} disabled={saving}>Cancel</button>
+            <button onClick={handleSubmit} style={{ ...saveBtnStyle, opacity: saving ? 0.65 : 1, ...(isMobile && { flex: 2, minHeight: 44 }) }} disabled={saving}>
               {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Event'}
             </button>
           </div>
@@ -299,9 +341,33 @@ function EventModal({ initial, onClose, onSave, onDelete }) {
 }
 
 function ConfirmDelete({ label, onCancel, onConfirm }) {
+  const isMobile = useIsMobile()
+  const mobileSheetOverlayStyle = {
+    position: 'fixed', inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+    display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+    zIndex: 100,
+  }
+  const mobileSheetStyle = {
+    width: '100%',
+    background: 'rgba(22,22,32,0.97)',
+    backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: '20px 20px 0 0',
+    padding: '0 24px',
+    paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 16px))',
+    transition: 'transform 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
+    textAlign: 'center',
+  }
   return (
-    <div style={overlayStyle} onClick={onCancel}>
-      <div style={{ ...modalStyle, width: 360, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+    <div style={isMobile ? mobileSheetOverlayStyle : overlayStyle} onClick={onCancel}>
+      <div
+        className={isMobile ? 'ios-sheet-enter' : ''}
+        style={isMobile ? mobileSheetStyle : { ...modalStyle, width: 360, textAlign: 'center' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {isMobile && <DragHandle />}
         <div style={{ fontSize: 22, marginBottom: 12, color: '#f87171' }}>⚠</div>
         <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.88)', marginBottom: 6 }}>Delete Event?</div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 24 }}>"{label}" will be permanently deleted.</div>
@@ -511,7 +577,7 @@ export default function Calendar() {
   const initialForm = addDate ? { title: '', start_dt: addDate, event_type: 'show', location: '', description: '' } : null
 
   return (
-    <div style={{ padding: 'clamp(16px, 3vw, 40px)', width: '100%', boxSizing: 'border-box', minWidth: 0, ...(isMobile && { paddingTop: 68 }) }}>
+    <div style={{ padding: isMobile ? '16px' : 'clamp(16px, 3vw, 40px)', width: '100%', boxSizing: 'border-box', minWidth: 0, ...(isMobile && { paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }) }}>
       {/* Success / error toast */}
       {toast && (
         <div style={{
@@ -542,8 +608,8 @@ export default function Calendar() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Calendar</h1>
-          <p style={{ color: 'rgba(255,255,255,0.45)', marginTop: 6, fontSize: 14 }}>{events.length} events</p>
+          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Calendar</h1>
+          <p style={{ color: 'rgba(255,255,255,0.45)', marginTop: 6, fontSize: 14, lineHeight: 1.5 }}>{events.length} events</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           {/* View toggle */}
@@ -571,15 +637,22 @@ export default function Calendar() {
         </div>
       </div>
 
-      {/* Type filters */}
+      {/* Type filters — 44px min height on mobile (Apple HIG) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {['', ...EVENT_TYPES].map(t => (
-          <button key={t} onClick={() => setFilter(t)} style={{
-            background: filter === t ? `${TYPE_COLOR[t] || '#7c6af7'}22` : 'transparent',
-            border: `1px solid ${filter === t ? (TYPE_COLOR[t] || '#7c6af7') : 'rgba(255,255,255,0.10)'}`,
-            borderRadius: 6, color: filter === t ? (TYPE_COLOR[t] || '#a89fff') : 'rgba(255,255,255,0.45)',
-            padding: '5px 12px', fontSize: 12, cursor: 'pointer', transition: 'all 0.12s',
-          }}>
+          <button
+            key={t}
+            onClick={() => setFilter(t)}
+            className="filter-pill"
+            style={{
+              background: filter === t ? `${TYPE_COLOR[t] || '#7c6af7'}22` : 'transparent',
+              border: `1px solid ${filter === t ? (TYPE_COLOR[t] || '#7c6af7') : 'rgba(255,255,255,0.10)'}`,
+              borderRadius: 8,
+              color: filter === t ? (TYPE_COLOR[t] || '#a89fff') : 'rgba(255,255,255,0.45)',
+              padding: '5px 12px', fontSize: 12, cursor: 'pointer', transition: 'all 0.12s',
+              letterSpacing: '0.04em',
+            }}
+          >
             {t ? t.charAt(0).toUpperCase() + t.slice(1) : 'All'}
           </button>
         ))}
@@ -640,22 +713,24 @@ export default function Calendar() {
         events.map(e => (
           <div key={e.id} style={{
             background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10,
+            border: '1px solid rgba(255,255,255,0.08)',
+            // iOS-feel card: 10px on mobile
+            borderRadius: isMobile ? 10 : 10,
             boxShadow: '0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
-            padding: '16px 20px', marginBottom: 10,
+            padding: isMobile ? '14px 16px' : '16px 20px', marginBottom: 10,
             borderLeft: `3px solid ${TYPE_COLOR[e.event_type] || '#9595b8'}`,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8,
             transition: 'box-shadow 150ms ease, background 150ms ease',
           }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.10), 0 0 0 1px rgba(255,255,255,0.12)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+            onMouseEnter={ev => { if (!isMobile) { ev.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.10), 0 0 0 1px rgba(255,255,255,0.12)'; ev.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}}
+            onMouseLeave={ev => { if (!isMobile) { ev.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)'; ev.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.88)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: isMobile ? 15 : 14, fontWeight: 600, color: 'rgba(255,255,255,0.88)', display: 'flex', alignItems: 'center', gap: 6, lineHeight: 1.4 }}>
                 {e.google_event_id && <GoogleBadge />}
                 {e.title}
               </div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4, lineHeight: 1.5 }}>
                 <span style={{
                   background: `${TYPE_COLOR[e.event_type]}22`,
                   border: `1px solid ${TYPE_COLOR[e.event_type]}44`,
@@ -681,7 +756,7 @@ export default function Calendar() {
                 })()}
                 {e.location && ` · ${e.location}`}
               </div>
-              {e.description && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', marginTop: 4 }}>{e.description}</div>}
+              {e.description && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', marginTop: 4, lineHeight: 1.5 }}>{e.description}</div>}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
               {e.google_event_id ? (
@@ -690,7 +765,13 @@ export default function Calendar() {
                 <>
                   <button
                     onClick={() => setEditing(e)}
-                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 6, color: 'rgba(255,255,255,0.45)', cursor: 'pointer', fontSize: 12, padding: '4px 8px', transition: 'border-color 0.12s, color 0.12s' }}
+                    style={{
+                      background: 'transparent', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 6,
+                      color: 'rgba(255,255,255,0.45)', cursor: 'pointer', fontSize: 12,
+                      padding: isMobile ? '4px 12px' : '4px 8px',
+                      minHeight: isMobile ? 36 : 'auto',
+                      transition: 'border-color 0.12s, color 0.12s',
+                    }}
                     onMouseEnter={el => { el.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)'; el.currentTarget.style.color = 'rgba(255,255,255,0.88)' }}
                     onMouseLeave={el => { el.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; el.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
                   >
@@ -698,7 +779,11 @@ export default function Calendar() {
                   </button>
                   <button
                     onClick={() => setDeleting(e)}
-                    style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.30)', cursor: 'pointer', fontSize: 18, lineHeight: 1, transition: 'color 0.12s' }}
+                    style={{
+                      background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.30)', cursor: 'pointer',
+                      fontSize: 18, lineHeight: 1, transition: 'color 0.12s',
+                      ...(isMobile && { minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }),
+                    }}
                     onMouseEnter={el => { el.currentTarget.style.color = '#f87171' }}
                     onMouseLeave={el => { el.currentTarget.style.color = 'rgba(255,255,255,0.30)' }}
                   >×</button>

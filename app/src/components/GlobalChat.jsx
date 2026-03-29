@@ -685,7 +685,7 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
           position: 'fixed',
           ...(isMobile
             ? {
-                // Full-screen overlay on mobile — sits above sidebar backdrop (zIndex 999)
+                // Full-screen overlay on mobile — sits above bottom nav (zIndex 990)
                 top: 0,
                 left: 0,
                 right: 0,
@@ -735,6 +735,10 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
           alignItems: 'center',
           gap: 12,
           padding: (!isMobile && minimized) ? '0 12px' : '14px 16px',
+          // Safe area: notch / Dynamic Island at top on mobile
+          paddingTop: isMobile
+            ? 'calc(14px + env(safe-area-inset-top, 0px))'
+            : (!isMobile && minimized) ? '0' : '14px',
           height: (!isMobile && minimized) ? 48 : 'auto',
           borderBottom: (!isMobile && minimized) ? 'none' : '1px solid #363650',
           flexShrink: 0,
@@ -822,20 +826,31 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
               </button>
             )}
 
-            {/* Close */}
+            {/* Close — 44×44 on mobile for Apple HIG compliance */}
             <button
               onClick={onClose}
               title="Close"
               style={{
-                background: 'transparent', border: 'none',
-                color: isMobile ? 'rgba(255,255,255,0.6)' : '#56567a',
-                fontSize: isMobile ? 26 : 20,
+                background: isMobile ? 'rgba(255,255,255,0.08)' : 'transparent',
+                border: isMobile ? '1px solid rgba(255,255,255,0.10)' : 'none',
+                borderRadius: isMobile ? 8 : 4,
+                color: isMobile ? 'rgba(255,255,255,0.75)' : '#56567a',
+                fontSize: isMobile ? 20 : 20,
                 cursor: 'pointer',
-                padding: '4px 6px', lineHeight: 1, borderRadius: 4,
-                transition: 'color 0.12s',
+                // 44×44 touch target on mobile
+                minWidth: isMobile ? 44 : 'auto',
+                minHeight: isMobile ? 44 : 'auto',
+                width: isMobile ? 44 : 'auto',
+                height: isMobile ? 44 : 'auto',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: 1,
+                transition: 'color 0.12s, background 0.12s',
+                flexShrink: 0,
               }}
               onMouseEnter={e => e.currentTarget.style.color = '#9595b8'}
-              onMouseLeave={e => e.currentTarget.style.color = isMobile ? 'rgba(255,255,255,0.6)' : '#56567a'}
+              onMouseLeave={e => e.currentTarget.style.color = isMobile ? 'rgba(255,255,255,0.75)' : '#56567a'}
             >
               ×
             </button>
@@ -845,15 +860,18 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
         {/* Messages */}
         {(isMobile || !minimized) && (
           <div
-            className="gc-scroll"
+            className="gc-scroll scroll-momentum"
             onScroll={handleScroll}
             style={{
               flex: 1,
               overflowY: 'auto',
-              padding: '14px 16px',
+              padding: isMobile ? '16px 16px' : '14px 16px',
               display: 'flex',
               flexDirection: 'column',
-              gap: 12,
+              gap: isMobile ? 2 : 12,
+              // Contain overscroll so background doesn't pull
+              overscrollBehavior: 'contain',
+              WebkitOverflowScrolling: 'touch',
             }}
           >
             {messages.length === 0 && (
@@ -902,17 +920,19 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
 
               if (m.role === 'user') {
                 return (
-                  <div key={m.id || i} style={{ display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.15s ease' }}>
+                  <div key={m.id || i} style={{ display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.15s ease', marginBottom: isMobile ? 12 : 4 }}>
                     <div style={{
                       maxWidth: '80%',
-                      background: '#7c6af722',
-                      border: '1px solid #7c6af755',
-                      borderRadius: '14px 14px 4px 14px',
-                      padding: '9px 13px',
-                      fontSize: 13,
-                      color: '#e8e8f8',
-                      lineHeight: 1.55,
+                      // iOS iMessage style: purple fill for user messages
+                      background: 'linear-gradient(135deg, #7c6af7, #5b52d6)',
+                      border: 'none',
+                      borderRadius: isMobile ? '18px 18px 4px 18px' : '14px 14px 4px 14px',
+                      padding: isMobile ? '12px 16px' : '9px 13px',
+                      fontSize: isMobile ? 15 : 13,
+                      color: '#fff',
+                      lineHeight: isMobile ? 1.5 : 1.55,
                       whiteSpace: 'pre-wrap',
+                      boxShadow: isMobile ? '0 2px 8px rgba(124,106,247,0.30)' : 'none',
                     }}>
                       {m.text || m.content}
                     </div>
@@ -927,7 +947,7 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
                   : null
 
                 return (
-                  <div key={m.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 4, animation: 'fadeIn 0.15s ease' }}>
+                  <div key={m.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 4, animation: 'fadeIn 0.15s ease', marginBottom: isMobile ? 12 : 4 }}>
                     {memberName && (
                       <div style={{
                         display: 'flex', alignItems: 'center', gap: 5,
@@ -951,13 +971,16 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
                     )}
                     <div style={{
                       maxWidth: '88%',
-                      background: '#242430',
-                      border: `1px solid ${m.error ? '#f8717144' : '#363650'}`,
-                      borderRadius: '14px 14px 14px 4px',
-                      padding: '9px 13px',
-                      fontSize: 13,
+                      // iOS iMessage style: glass fill for AI messages
+                      background: isMobile ? 'rgba(255,255,255,0.07)' : '#242430',
+                      border: `1px solid ${m.error ? '#f8717144' : isMobile ? 'rgba(255,255,255,0.10)' : '#363650'}`,
+                      borderRadius: isMobile ? '18px 18px 18px 4px' : '14px 14px 14px 4px',
+                      padding: isMobile ? '12px 16px' : '9px 13px',
+                      fontSize: isMobile ? 15 : 13,
                       color: m.error ? '#f87171' : '#e8e8f8',
-                      lineHeight: 1.55,
+                      lineHeight: isMobile ? 1.5 : 1.55,
+                      backdropFilter: isMobile ? 'blur(8px)' : 'none',
+                      WebkitBackdropFilter: isMobile ? 'blur(8px)' : 'none',
                     }}>
                       {m.text ? (
                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
@@ -992,7 +1015,11 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
         {(isMobile || !minimized) && (
           <div style={{
             borderTop: '1px solid #363650',
-            padding: isMobile ? '10px 12px 20px' : '10px 12px',
+            padding: '10px 12px',
+            // Safe area: home indicator on mobile (GlobalChat is full-screen)
+            paddingBottom: isMobile
+              ? 'calc(10px + env(safe-area-inset-bottom, 16px))'
+              : '10px',
             display: 'flex',
             gap: 8,
             flexShrink: 0,
@@ -1014,13 +1041,15 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
                 borderRadius: 10,
                 color: '#e8e8f8',
                 padding: '9px 12px',
-                fontSize: 13,
+                // 16px prevents iOS auto-zoom on focus
+                fontSize: isMobile ? 16 : 13,
                 resize: 'none',
                 fontFamily: 'inherit',
                 lineHeight: '20px',
                 overflowY: 'hidden',
                 transition: 'border-color 0.15s',
-                minHeight: 38,
+                // Apple HIG: 44px minimum touch target
+                minHeight: isMobile ? 44 : 38,
               }}
             />
             <button
@@ -1031,8 +1060,11 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
                 border: 'none',
                 borderRadius: 10,
                 color: loading || !input.trim() ? '#56567a' : '#fff',
-                width: 38,
-                height: 38,
+                // 44×44 on mobile
+                width: isMobile ? 44 : 38,
+                height: isMobile ? 44 : 38,
+                minWidth: isMobile ? 44 : 38,
+                minHeight: isMobile ? 44 : 38,
                 fontSize: 16,
                 cursor: loading || !input.trim() ? 'default' : 'pointer',
                 display: 'flex',
