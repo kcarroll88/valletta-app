@@ -2162,6 +2162,170 @@ def get_current_user(authorization: Optional[str] = Header(None)):
     return dict(row)
 
 
+# ── Media Articles ────────────────────────────────────────────────────────────
+
+def _scrape_article(url: str) -> dict:
+    """Fetch a URL and extract article metadata from Open Graph and meta tags."""
+    import httpx
+    from html.parser import HTMLParser
+
+    class MetaParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.meta = {}
+            self.title = None
+            self._in_title = False
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "title":
+                self._in_title = True
+            if tag == "meta":
+                prop = attrs.get("property") or attrs.get("name") or ""
+                content = attrs.get("content", "")
+                if prop and content:
+                    self.meta[prop.lower()] = content
+
+        def handle_data(self, data):
+            if self._in_title and not self.title:
+                self.title = data.strip()
+
+        def handle_endtag(self, tag):
+            if tag == "title":
+                self._in_title = False
+
+    try:
+        resp = httpx.get(
+            url,
+            follow_redirects=True,
+            timeout=15,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; Valletta/1.0; +https://vallettamusic.com)"}
+        )
+        resp.raise_for_status()
+        html = resp.text[:200_000]  # cap at 200KB
+    except Exception as e:
+        raise ValueError(f"Could not fetch URL: {e}")
+
+    parser = MetaParser()
+    parser.feed(html)
+    m = parser.meta
+
+    title = (
+        m.get("og:title") or
+        m.get("twitter:title") or
+        parser.title or
+        url
+    )
+    summary = (
+        m.get("og:description") or
+        m.get("twitter:description") or
+        m.get("description") or
+        None
+    )
+    image_url = (
+        m.get("og:image") or
+        m.get("twitter:image") or
+        None
+    )
+    publication = (
+        m.get("og:site_name") or
+        m.get("application-name") or
+        None
+    )
+    author = (
+        m.get("author") or
+        m.get("article:author") or
+        m.get("twitter:creator") or
+        None
+    )
+    published_date = (
+        m.get("article:published_time") or
+        m.get("article:published") or
+        m.get("pubdate") or
+        m.get("date") or
+        None
+    )
+    # Normalize date — keep only the date part if it's a full ISO timestamp
+    if published_date and "T" in published_date:
+        published_date = published_date.split("T")[0]
+
+    return {
+        "title": title[:500] if title else None,
+        "author": author[:200] if author else None,
+        "publication": publication[:200] if publication else None,
+        "published_date": published_date,
+        "summary": summary[:1000] if summary else None,
+        "image_url": image_url[:500] if image_url else None,
+    }
+
+
+class MediaArticleCreate(BaseModel):
+    url: str
+
+@app.post("/api/media/articles", status_code=201)
+def create_media_article(body: MediaArticleCreate, authorization: Optional[str] = Header(None)):
+    _require_auth(authorization)
+    url = body.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "Invalid URL")
+
+    # Check for duplicate
+    with get_db() as conn:
+        existing = conn.execute("SELECT id FROM media_articles WHERE url = ?", (url,)).fetchone()
+        if existing:
+            raise HTTPException(409, "Article already saved")
+
+    # Scrape metadata
+    try:
+        meta = _scrape_article(url)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+    ts = now_ts()
+    with get_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO media_articles
+               (url, title, author, publication, published_date, summary, image_url, scraped_at, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (url, meta["title"], meta["author"], meta["publication"],
+             meta["published_date"], meta["summary"], meta["image_url"], ts, ts)
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM media_articles WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return row_to_dict(row)
+
+@app.get("/api/media/articles")
+def list_media_articles(
+    search: Optional[str] = None,
+    sort: Optional[str] = "newest",   # newest | oldest
+    limit: int = Query(100, le=500),
+    offset: int = 0,
+    authorization: Optional[str] = Header(None),
+):
+    _require_auth(authorization)
+    clauses, params = [], []
+    if search:
+        clauses.append("(title LIKE ? OR summary LIKE ? OR publication LIKE ? OR author LIKE ?)")
+        s = f"%{search}%"
+        params.extend([s, s, s, s])
+    sql = "SELECT * FROM media_articles"
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    order = "ASC" if sort == "oldest" else "DESC"
+    sql += f" ORDER BY COALESCE(published_date, scraped_at) {order} LIMIT ? OFFSET ?"
+    params += [limit, offset]
+    with get_db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+@app.delete("/api/media/articles/{article_id}", status_code=204)
+def delete_media_article(article_id: int, authorization: Optional[str] = Header(None)):
+    _require_auth(authorization)
+    with get_db() as conn:
+        conn.execute("DELETE FROM media_articles WHERE id = ?", (article_id,))
+        conn.commit()
+
+
 # ── Chat endpoint ─────────────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):

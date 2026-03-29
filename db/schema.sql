@@ -418,6 +418,25 @@ CREATE TABLE IF NOT EXISTS analytics_connections (
 );
 
 -- ─────────────────────────────────────────
+-- MEDIA — Press articles and clippings
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS media_articles (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    url             TEXT NOT NULL UNIQUE,
+    title           TEXT,
+    author          TEXT,
+    publication     TEXT,       -- e.g. "Rolling Stone", "Pitchfork"
+    published_date  TEXT,       -- ISO date string from article metadata
+    summary         TEXT,       -- og:description or first paragraph
+    image_url       TEXT,       -- og:image
+    scraped_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_articles_published ON media_articles(published_date);
+CREATE INDEX IF NOT EXISTS idx_media_articles_scraped ON media_articles(scraped_at DESC);
+
+-- ─────────────────────────────────────────
 -- APP USERS & AUTH SESSIONS
 -- Per-user Google OAuth login for the app.
 -- ─────────────────────────────────────────

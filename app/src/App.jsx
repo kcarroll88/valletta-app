@@ -16,6 +16,7 @@ import Roadmap from './views/Roadmap'
 import Finance from './views/Finance'
 import Ideas from './views/Ideas'
 import Setlist from './views/Setlist'
+import Media from './views/Media'
 
 const VIEWS = {
   dashboard:    Dashboard,
@@ -26,6 +27,7 @@ const VIEWS = {
   tasks:        Tasks,
   ideas:        Ideas,
   setlist:      Setlist,
+  media:        Media,
   contacts:     Contacts,
   insights:     Insights,
   integrations: Integrations,
