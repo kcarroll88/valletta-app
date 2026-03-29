@@ -243,12 +243,17 @@ def apply_decisions(
             _log(f"  SKIP: decision missing file_id: {d}")
             continue
 
-        # Fetch file name for logging
-        row = conn.execute("SELECT name FROM drive_files WHERE id=?", (file_id,)).fetchone()
+        # Fetch file name and current folder_id for logging and guard
+        row = conn.execute("SELECT name, folder_id FROM drive_files WHERE id=?", (file_id,)).fetchone()
         if not row:
             _log(f"  SKIP: drive_files id={file_id} not found")
             continue
         file_name = row[0]
+
+        # Never overwrite a manually-set folder_id
+        if row[1] is not None:
+            _log(f"  SKIP: \"{file_name}\" already has folder_id={row[1]} — not overwriting")
+            continue
 
         # Handle new subfolder creation
         if new_folder_name and not folder_id:
