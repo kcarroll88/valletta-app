@@ -179,7 +179,7 @@ function MentionTextarea({ value, onChange, placeholder, style }) {
 
 // ─── Task Detail Panel ────────────────────────────────────────────────────────
 
-function TaskDetailPanel({ taskId, onClose, onUpdate, onDelete, isMobile }) {
+function TaskDetailPanel({ taskId, onClose, onUpdate, onDelete, isMobile, currentUser }) {
   const [task, setTask]             = useState(null)
   const [loading, setLoading]       = useState(true)
   const [editTitle, setEditTitle]   = useState(false)
@@ -190,11 +190,11 @@ function TaskDetailPanel({ taskId, onClose, onUpdate, onDelete, isMobile }) {
   const [newSubtask, setNewSubtask] = useState('')
   const [comments, setComments]     = useState([])
   const [commentText, setCommentText] = useState('')
-  const [commentAuthor, setCommentAuthor] = useState(
-    () => localStorage.getItem('vlt_author') || ''
-  )
+  const [commentPosting, setCommentPosting] = useState(false)
   const [saving, setSaving]         = useState(false)
   const [visible, setVisible]       = useState(false)
+
+  const authorName = currentUser || localStorage.getItem('vlt_author') || 'You'
 
   useEffect(() => {
     setTimeout(() => setVisible(true), 10)
@@ -260,12 +260,18 @@ function TaskDetailPanel({ taskId, onClose, onUpdate, onDelete, isMobile }) {
 
   const handlePostComment = async () => {
     if (!commentText.trim()) return
-    const author = commentAuthor.trim() || 'You'
-    localStorage.setItem('vlt_author', author)
-    const c = await postComment(taskId, author, commentText.trim())
-    setComments(prev => [...prev, c])
-    setCommentText('')
-    onUpdate({ ...task, comment_count: (task.comment_count || 0) + 1 })
+    setCommentPosting(true)
+    try {
+      const c = await postComment(taskId, authorName, commentText.trim())
+      setComments(prev => [...prev, c])
+      setCommentText('')
+      if (onUpdate) onUpdate({ ...task, comment_count: (task.comment_count || 0) + 1 })
+    } catch(e) {
+      console.error('Comment post error:', e)
+      alert('Failed to post comment: ' + e.message)
+    } finally {
+      setCommentPosting(false)
+    }
   }
 
   const handleDeleteComment = async (cid) => {
@@ -525,12 +531,6 @@ function TaskDetailPanel({ taskId, onClose, onUpdate, onDelete, isMobile }) {
 
               {/* Comment input */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <input
-                  value={commentAuthor}
-                  onChange={e => setCommentAuthor(e.target.value)}
-                  placeholder="Your name"
-                  style={{ ...fieldStyle, fontSize: 12, padding: '6px 10px' }}
-                />
                 <MentionTextarea
                   value={commentText}
                   onChange={setCommentText}
@@ -539,15 +539,15 @@ function TaskDetailPanel({ taskId, onClose, onUpdate, onDelete, isMobile }) {
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={handlePostComment}
-                    disabled={!commentText.trim()}
+                    disabled={!commentText.trim() || commentPosting}
                     style={{
-                      background: commentText.trim() ? 'rgba(124,106,247,0.25)' : 'rgba(255,255,255,0.05)',
-                      border: `1px solid ${commentText.trim() ? 'rgba(124,106,247,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                      borderRadius: 8, color: commentText.trim() ? '#a89fff' : 'rgba(255,255,255,0.3)',
-                      fontSize: 13, cursor: commentText.trim() ? 'pointer' : 'default',
+                      background: commentText.trim() && !commentPosting ? 'rgba(124,106,247,0.25)' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${commentText.trim() && !commentPosting ? 'rgba(124,106,247,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                      borderRadius: 8, color: commentText.trim() && !commentPosting ? '#a89fff' : 'rgba(255,255,255,0.3)',
+                      fontSize: 13, cursor: commentText.trim() && !commentPosting ? 'pointer' : 'default',
                       padding: '7px 18px', transition: 'all 0.15s',
                     }}
-                  >Post</button>
+                  >{commentPosting ? 'Posting…' : 'Post'}</button>
                 </div>
               </div>
             </div>
@@ -1400,6 +1400,8 @@ function TableView({ tasks, onTaskClick, onUpdateTask, onAddTask, isMobile }) {
 
 function TableRow({ task, isMobile, onTitleClick, onPatch, popover, openPopover, closePopover, popAnchorRefs }) {
   const [hov, setHov] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [subtasks, setSubtasks] = useState([])
   const overdueDate = isOverdue(task.due_date)
 
   const getRef = (field) => {
@@ -1423,125 +1425,166 @@ function TableRow({ task, isMobile, onTitleClick, onPatch, popover, openPopover,
   }
 
   return (
-    <tr
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        height: 44,
-        background: hov ? 'rgba(255,255,255,0.04)' : 'transparent',
-        borderLeft: `3px solid ${PRIORITY_COLOR[task.priority] || '#9595b8'}`,
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        transition: 'background 0.1s',
-        cursor: 'default',
-      }}
-    >
-      {/* Drag handle — desktop only */}
-      {!isMobile && (
-        <td style={{ width: 24, padding: '0 4px', color: 'rgba(255,255,255,0.15)', fontSize: 14, textAlign: 'center' }}>
-          {hov ? '⠿' : ''}
-        </td>
-      )}
-
-      {/* Title */}
-      <td
-        onClick={onTitleClick}
+    <React.Fragment>
+      <tr
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
         style={{
-          padding: '0 12px', fontWeight: 700, fontSize: 14,
-          color: 'rgba(255,255,255,0.92)', cursor: 'pointer',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          height: 44,
+          background: hov ? 'rgba(255,255,255,0.04)' : 'transparent',
+          borderLeft: `3px solid ${PRIORITY_COLOR[task.priority] || '#9595b8'}`,
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          transition: 'background 0.1s',
+          cursor: 'default',
         }}
       >
-        {task.title}
-      </td>
+        {/* Drag handle — desktop only */}
+        {!isMobile && (
+          <td style={{ width: 24, padding: '0 4px', color: 'rgba(255,255,255,0.15)', fontSize: 14, textAlign: 'center' }}>
+            {hov ? '⠿' : ''}
+          </td>
+        )}
 
-      {/* Status */}
-      <td
-        onClick={(e) => cellClick('status', e)}
-        style={{ width: 130, padding: '0 12px', cursor: 'pointer' }}
-      >
-        <span style={{
-          display: 'inline-block', padding: '3px 10px', borderRadius: 20,
-          fontSize: 12, fontWeight: 600,
-          background: (STATUS_COLOR[task.status] || '#9595b8') + '28',
-          color: STATUS_COLOR[task.status] || '#9595b8',
-          border: `1px solid ${(STATUS_COLOR[task.status] || '#9595b8')}55`,
-          whiteSpace: 'nowrap',
-        }}>
-          {STATUS_LABEL[task.status] || task.status}
-        </span>
-      </td>
-
-      {/* Priority */}
-      <td
-        onClick={(e) => cellClick('priority', e)}
-        style={{ width: 100, padding: '0 12px', cursor: 'pointer' }}
-      >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: PRIORITY_COLOR[task.priority] || '#9595b8', flexShrink: 0 }} />
-          <span style={{ fontSize: 12, color: PRIORITY_COLOR[task.priority] || 'rgba(255,255,255,0.5)' }}>
-            {task.priority ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1) : '—'}
-          </span>
-        </span>
-      </td>
-
-      {/* Assignee — desktop only */}
-      {!isMobile && (
+        {/* Title */}
         <td
-          onClick={(e) => cellClick('assignee', e)}
-          style={{ width: 110, padding: '0 12px', cursor: 'pointer' }}
+          onClick={onTitleClick}
+          style={{
+            padding: '0 12px', fontWeight: 700, fontSize: 14,
+            color: 'rgba(255,255,255,0.92)', cursor: 'pointer',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
         >
-          {task.assignee ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {task.title}
+        </td>
+
+        {/* Status */}
+        <td
+          onClick={(e) => cellClick('status', e)}
+          style={{ width: 130, padding: '0 12px', cursor: 'pointer' }}
+        >
+          <span style={{
+            display: 'inline-block', padding: '3px 10px', borderRadius: 20,
+            fontSize: 12, fontWeight: 600,
+            background: (STATUS_COLOR[task.status] || '#9595b8') + '28',
+            color: STATUS_COLOR[task.status] || '#9595b8',
+            border: `1px solid ${(STATUS_COLOR[task.status] || '#9595b8')}55`,
+            whiteSpace: 'nowrap',
+          }}>
+            {STATUS_LABEL[task.status] || task.status}
+          </span>
+        </td>
+
+        {/* Priority */}
+        <td
+          onClick={(e) => cellClick('priority', e)}
+          style={{ width: 100, padding: '0 12px', cursor: 'pointer' }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: PRIORITY_COLOR[task.priority] || '#9595b8', flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: PRIORITY_COLOR[task.priority] || 'rgba(255,255,255,0.5)' }}>
+              {task.priority ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1) : '—'}
+            </span>
+          </span>
+        </td>
+
+        {/* Assignee — desktop only */}
+        {!isMobile && (
+          <td
+            onClick={(e) => cellClick('assignee', e)}
+            style={{ width: 110, padding: '0 12px', cursor: 'pointer' }}
+          >
+            {task.assignee ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  background: 'rgba(124,106,247,0.4)',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0,
+                }}>{task.assignee.charAt(0).toUpperCase()}</span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {task.assignee}
+                </span>
+              </span>
+            ) : (
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>—</span>
+            )}
+          </td>
+        )}
+
+        {/* Due Date — desktop only */}
+        {!isMobile && (
+          <td
+            onClick={(e) => cellClick('due_date', e)}
+            style={{ width: 110, padding: '0 12px', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 12, color: overdueDate ? '#f87171' : 'rgba(255,255,255,0.45)' }}>
+              {task.due_date ? fmtDate(task.due_date) : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>}
+            </span>
+          </td>
+        )}
+
+        {/* Subtasks — desktop only */}
+        {!isMobile && (
+          <td style={{ width: 90, padding: '0 12px' }}>
+            {task.subtask_count > 0 ? (
+              <span
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  if (!expanded) {
+                    const full = await api.task(task.id)
+                    setSubtasks(full.subtasks || [])
+                  }
+                  setExpanded(v => !v)
+                }}
+                style={{ cursor: 'pointer', fontSize: 12, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                <span style={{ fontSize: 10 }}>{expanded ? '▼' : '▶'}</span>
+                {task.subtasks_done ?? 0}/{task.subtask_count} ✓
+              </span>
+            ) : (
+              <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 12 }}>—</span>
+            )}
+          </td>
+        )}
+
+        {/* Comments — desktop only */}
+        {!isMobile && (
+          <td style={{ width: 70, padding: '0 12px' }}>
+            {task.comment_count > 0 ? (
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>💬 {task.comment_count}</span>
+            ) : null}
+          </td>
+        )}
+      </tr>
+      {expanded && subtasks.map(sub => (
+        <tr key={sub.id} style={{ background: 'rgba(255,255,255,0.02)' }}>
+          <td style={{ width: 24 }} />
+          <td style={{ padding: '8px 12px', paddingLeft: 32 }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{
-                width: 22, height: 22, borderRadius: '50%',
-                background: 'rgba(124,106,247,0.4)',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0,
-              }}>{task.assignee.charAt(0).toUpperCase()}</span>
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {task.assignee}
+                width: 14, height: 14, borderRadius: '50%', border: '1.5px solid',
+                borderColor: sub.status === 'done' ? '#4ade80' : 'rgba(255,255,255,0.3)',
+                background: sub.status === 'done' ? '#4ade80' : 'transparent',
+                flexShrink: 0
+              }} />
+              <span style={{ textDecoration: sub.status === 'done' ? 'line-through' : 'none', opacity: sub.status === 'done' ? 0.5 : 1 }}>
+                {sub.title}
               </span>
             </span>
-          ) : (
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>—</span>
-          )}
-        </td>
-      )}
-
-      {/* Due Date — desktop only */}
-      {!isMobile && (
-        <td
-          onClick={(e) => cellClick('due_date', e)}
-          style={{ width: 110, padding: '0 12px', cursor: 'pointer' }}
-        >
-          <span style={{ fontSize: 12, color: overdueDate ? '#f87171' : 'rgba(255,255,255,0.45)' }}>
-            {task.due_date ? fmtDate(task.due_date) : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>}
-          </span>
-        </td>
-      )}
-
-      {/* Subtasks — desktop only */}
-      {!isMobile && (
-        <td style={{ width: 90, padding: '0 12px' }}>
-          {task.subtask_count > 0 ? (
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
-              {task.subtasks_done ?? 0}/{task.subtask_count} ✓
+          </td>
+          <td style={{ padding: '8px 12px' }}>
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: STATUS_COLOR[sub.status] + '33', color: STATUS_COLOR[sub.status] }}>
+              {STATUS_LABEL[sub.status]}
             </span>
-          ) : (
-            <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 12 }}>—</span>
-          )}
-        </td>
-      )}
-
-      {/* Comments — desktop only */}
-      {!isMobile && (
-        <td style={{ width: 70, padding: '0 12px' }}>
-          {task.comment_count > 0 ? (
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>💬 {task.comment_count}</span>
-          ) : null}
-        </td>
-      )}
-    </tr>
+          </td>
+          <td colSpan={6} style={{ padding: '8px 12px' }}>
+            <span style={{ fontSize: 11, color: PRIORITY_COLOR[sub.priority] }}>
+              {sub.priority}
+            </span>
+          </td>
+        </tr>
+      ))}
+    </React.Fragment>
   )
 }
 
@@ -1685,6 +1728,16 @@ export default function Tasks() {
   const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [deleteTarget, setDeleteTarget]   = useState(null)
   const [dragOverStatus, setDragOverStatus] = useState(null)
+  const [currentUser, setCurrentUser]     = useState('')
+
+  useEffect(() => {
+    const token = localStorage.getItem('vlt_token')
+    if (!token) return
+    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(u => { if (u?.name) setCurrentUser(u.name) })
+      .catch(() => {})
+  }, [])
 
   // View toggle: 'board' | 'table'
   const [view, setView] = useState(() => localStorage.getItem('vlt_tasks_view') || 'board')
@@ -1959,6 +2012,7 @@ export default function Tasks() {
         <TaskDetailPanel
           taskId={selectedTaskId}
           isMobile={isMobile}
+          currentUser={currentUser}
           onClose={() => setSelectedTaskId(null)}
           onUpdate={handleUpdateTask}
           onDelete={(task) => { setDeleteTarget(task); setSelectedTaskId(null) }}

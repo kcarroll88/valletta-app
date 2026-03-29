@@ -2135,6 +2135,30 @@ def google_login_callback(code: str, state: str):
         return _Redirect(f"{FRONTEND_URL}/?error=login&reason={str(e)[:100]}")
 
 
+@app.get("/api/auth/me")
+def get_current_user(authorization: Optional[str] = Header(None)):
+    """Return the current user's profile from their session token."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Missing token")
+    token = authorization.removeprefix("Bearer ").strip()
+
+    # Legacy in-memory token — no user record, return generic
+    if token in _ACTIVE_TOKENS:
+        return {"name": "Team", "email": None, "picture_url": None}
+
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT u.name, u.email, u.picture_url
+               FROM auth_sessions s
+               JOIN users u ON u.id = s.user_id
+               WHERE s.token = ? AND s.expires_at > datetime('now')""",
+            (token,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(401, "Invalid or expired token")
+    return dict(row)
+
+
 # ── Chat endpoint ─────────────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):
