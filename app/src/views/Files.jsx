@@ -23,70 +23,64 @@ const drivePatch = (path, body) =>
 // ─── Folder Meta Map ─────────────────────────────────────────────────────────
 
 const FOLDER_META = {
-  'Art & Design':             { icon: '🎨', color: '#7C3AED' },
-  'Music':                    { icon: '🎵', color: '#2563EB' },
-  'Photos':                   { icon: '📸', color: '#059669' },
-  'Merch':                    { icon: '👕', color: '#D97706' },
-  'Press & EPK':              { icon: '📰', color: '#0891B2' },
-  'Videos':                   { icon: '🎞️', color: '#DC2626' },
-  'Social Media':             { icon: '📣', color: '#7C3AED' },
-  'Touring':                  { icon: '🚐', color: '#64748B' },
-  'Business':                 { icon: '💼', color: '#374151' },
-  'Logos':                    { icon: '✏️', color: '#8B5CF6' },
-  'Flyers & Posters':         { icon: '📄', color: '#8B5CF6' },
-  'Album & Single Art':       { icon: '🖼️', color: '#8B5CF6' },
-  'Banners & Headers':        { icon: '🏳️', color: '#8B5CF6' },
-  'Releases':                 { icon: '💿', color: '#3B82F6' },
-  'Singles':                  { icon: '🎶', color: '#60A5FA' },
-  'EPs & Albums':             { icon: '📀', color: '#60A5FA' },
-  'Demos & Ideas':            { icon: '💡', color: '#3B82F6' },
-  'Stems & Sessions':         { icon: '🎛️', color: '#3B82F6' },
-  'Live Recordings':          { icon: '🎤', color: '#3B82F6' },
-  'Press Photos':             { icon: '🗞️', color: '#10B981' },
-  'Live Shows':               { icon: '🎸', color: '#10B981' },
-  'Behind the Scenes':        { icon: '🎬', color: '#10B981' },
-  'Headshots':                { icon: '👤', color: '#10B981' },
-  'Designs':                  { icon: '✏️', color: '#F59E0B' },
-  'Product Photos':           { icon: '📦', color: '#F59E0B' },
-  'Mockups':                  { icon: '🪞', color: '#F59E0B' },
-  'Press Releases':           { icon: '📝', color: '#06B6D4' },
-  'EPK Materials':            { icon: '📂', color: '#06B6D4' },
-  'Articles & Features':      { icon: '✂️', color: '#06B6D4' },
-  'Radio & Podcasts':         { icon: '📻', color: '#06B6D4' },
-  'Music Videos':             { icon: '🎥', color: '#EF4444' },
-  'Live Performances':        { icon: '🎭', color: '#EF4444' },
-  'Short Clips & Reels':      { icon: '📱', color: '#EF4444' },
-  'Content Calendar Assets':  { icon: '🗓️', color: '#8B5CF6' },
-  'Graphics & Templates':     { icon: '🖼️', color: '#8B5CF6' },
-  'Captions & Copy':          { icon: '💬', color: '#8B5CF6' },
-  'Itineraries':              { icon: '🗺️', color: '#94A3B8' },
-  'Stage Plots & Riders':     { icon: '🎚️', color: '#94A3B8' },
-  'Venue Contacts':           { icon: '📍', color: '#94A3B8' },
-  'Contracts':                { icon: '📋', color: '#6B7280' },
-  'Finances':                 { icon: '💰', color: '#6B7280' },
-  'Band Agreements':          { icon: '🤝', color: '#6B7280' },
-  'Sync & Licensing':         { icon: '🎬', color: '#6B7280' },
+  'Art & Design':             { color: '#7C3AED' },
+  'Music':                    { color: '#2563EB' },
+  'Photos':                   { color: '#059669' },
+  'Merch':                    { color: '#D97706' },
+  'Press & EPK':              { color: '#0891B2' },
+  'Videos':                   { color: '#DC2626' },
+  'Social Media':             { color: '#7C3AED' },
+  'Touring':                  { color: '#64748B' },
+  'Business':                 { color: '#374151' },
+  'Logos':                    { color: '#8B5CF6' },
+  'Flyers & Posters':         { color: '#8B5CF6' },
+  'Album & Single Art':       { color: '#8B5CF6' },
+  'Banners & Headers':        { color: '#8B5CF6' },
+  'Releases':                 { color: '#3B82F6' },
+  'Singles':                  { color: '#60A5FA' },
+  'EPs & Albums':             { color: '#60A5FA' },
+  'Demos & Ideas':            { color: '#3B82F6' },
+  'Stems & Sessions':         { color: '#3B82F6' },
+  'Live Recordings':          { color: '#3B82F6' },
+  'Press Photos':             { color: '#10B981' },
+  'Live Shows':               { color: '#10B981' },
+  'Behind the Scenes':        { color: '#10B981' },
+  'Headshots':                { color: '#10B981' },
+  'Designs':                  { color: '#F59E0B' },
+  'Product Photos':           { color: '#F59E0B' },
+  'Mockups':                  { color: '#F59E0B' },
+  'Press Releases':           { color: '#06B6D4' },
+  'EPK Materials':            { color: '#06B6D4' },
+  'Articles & Features':      { color: '#06B6D4' },
+  'Radio & Podcasts':         { color: '#06B6D4' },
+  'Music Videos':             { color: '#EF4444' },
+  'Live Performances':        { color: '#EF4444' },
+  'Short Clips & Reels':      { color: '#EF4444' },
+  'Content Calendar Assets':  { color: '#8B5CF6' },
+  'Graphics & Templates':     { color: '#8B5CF6' },
+  'Captions & Copy':          { color: '#8B5CF6' },
+  'Itineraries':              { color: '#94A3B8' },
+  'Stage Plots & Riders':     { color: '#94A3B8' },
+  'Venue Contacts':           { color: '#94A3B8' },
+  'Contracts':                { color: '#6B7280' },
+  'Finances':                 { color: '#6B7280' },
+  'Band Agreements':          { color: '#6B7280' },
+  'Sync & Licensing':         { color: '#6B7280' },
 }
-const folderMeta = (name) => FOLDER_META[name] || { icon: '📁', color: '#6B7280' }
+const folderMeta = (name) => FOLDER_META[name] || { color: '#6B7280' }
 
 // ─── File Icon Map ────────────────────────────────────────────────────────────
 
-const fileIconMap = (mimeType) => {
-  if (!mimeType) return { icon: '📄', color: '#6B7280' }
-  if (mimeType.includes('image'))        return { icon: '🖼️', color: '#10B981' }
-  if (mimeType.includes('video'))        return { icon: '🎬', color: '#EF4444' }
-  if (mimeType.includes('audio'))        return { icon: '🎵', color: '#3B82F6' }
-  if (mimeType.includes('pdf'))          return { icon: '📋', color: '#F59E0B' }
-  if (mimeType.includes('spreadsheet') || mimeType.includes('excel'))
-                                         return { icon: '📊', color: '#059669' }
-  if (mimeType.includes('document') || mimeType.includes('word'))
-                                         return { icon: '📝', color: '#2563EB' }
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint'))
-                                         return { icon: '📊', color: '#DC2626' }
-  if (mimeType.includes('zip') || mimeType.includes('archive'))
-                                         return { icon: '📦', color: '#64748B' }
-  if (mimeType.includes('folder'))       return { icon: '📁', color: '#6B7280' }
-  return { icon: '📄', color: '#6B7280' }
+const fileIconMap = (mimeType = '') => {
+  if (mimeType.includes('image'))                                     return { color: '#10B981', label: 'IMG' }
+  if (mimeType.includes('video'))                                     return { color: '#EF4444', label: 'VID' }
+  if (mimeType.includes('audio'))                                     return { color: '#3B82F6', label: 'AUD' }
+  if (mimeType.includes('pdf'))                                       return { color: '#F59E0B', label: 'PDF' }
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return { color: '#059669', label: 'XLS' }
+  if (mimeType.includes('document') || mimeType.includes('word'))     return { color: '#2563EB', label: 'DOC' }
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return { color: '#DC2626', label: 'PPT' }
+  if (mimeType.includes('zip') || mimeType.includes('archive'))       return { color: '#64748B', label: 'ZIP' }
+  return { color: '#6B7280', label: 'FILE' }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -145,6 +139,71 @@ function findFolder(tree, id) {
     }
   }
   return null
+}
+
+// ─── SVG Icon Components ──────────────────────────────────────────────────────
+
+function FolderIcon({ color = '#4A90D9', size = 48 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Folder tab */}
+      <path
+        d="M4 14C4 12.9 4.9 12 6 12H18L22 16H42C43.1 16 44 16.9 44 18V38C44 39.1 43.1 40 42 40H6C4.9 40 4 39.1 4 38V14Z"
+        fill={color}
+        opacity="0.9"
+      />
+      {/* Folder body highlight */}
+      <path
+        d="M4 18H44V38C44 39.1 43.1 40 42 40H6C4.9 40 4 39.1 4 38V18Z"
+        fill={color}
+      />
+      {/* Shine overlay */}
+      <path
+        d="M4 18H44V22H4V18Z"
+        fill="white"
+        opacity="0.15"
+      />
+    </svg>
+  )
+}
+
+function FileIcon({ mimeType = '', size = 48 }) {
+  const { color, label } = fileIconMap(mimeType)
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Document body */}
+      <path
+        d="M10 6C10 4.9 10.9 4 12 4H30L38 12V42C38 43.1 37.1 44 36 44H12C10.9 44 10 43.1 10 42V6Z"
+        fill="rgba(255,255,255,0.08)"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth="1"
+      />
+      {/* Folded corner */}
+      <path
+        d="M30 4L38 12H32C30.9 12 30 11.1 30 10V4Z"
+        fill={color}
+        opacity="0.7"
+      />
+      {/* Type label bar */}
+      <rect x="10" y="28" width="28" height="10" rx="2" fill={color} opacity="0.85" />
+      {/* Type text */}
+      <text
+        x="24"
+        y="36"
+        textAnchor="middle"
+        fill="white"
+        fontSize="7"
+        fontFamily="system-ui, sans-serif"
+        fontWeight="600"
+      >
+        {label}
+      </text>
+      {/* Content lines */}
+      <line x1="14" y1="20" x2="34" y2="20" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round"/>
+      <line x1="14" y1="24" x2="28" y2="24" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  )
 }
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -218,18 +277,8 @@ function SidebarTree({ tree, activeFolderId, onSelect }) {
           </span>
 
           {/* Folder icon */}
-          <span style={{
-            width: 20,
-            height: 20,
-            borderRadius: '50%',
-            background: meta.color + '33',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 11,
-            flexShrink: 0,
-          }}>
-            {meta.icon}
+          <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            <FolderIcon color={meta.color} size={20} />
           </span>
 
           {/* Name */}
@@ -331,7 +380,7 @@ function Breadcrumb({ path, onNavigate }) {
 
 // ─── Icon View ────────────────────────────────────────────────────────────────
 
-function IconView({ folders, files, onFolderClick, isMobile, searchQuery }) {
+function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot }) {
   const filteredFolders = folders.filter(f =>
     !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -351,7 +400,9 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery }) {
         height: 280,
         gap: 10,
       }}>
-        <div style={{ fontSize: 36, opacity: 0.12 }}>📂</div>
+        <div style={{ opacity: 0.18 }}>
+          <FolderIcon color="#6B7280" size={48} />
+        </div>
         <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>
           {searchQuery ? 'No results for "' + searchQuery + '"' : 'This folder is empty'}
         </div>
@@ -395,16 +446,12 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery }) {
             <div style={{
               width: 80,
               height: 80,
-              borderRadius: 20,
-              background: meta.color + '33',
-              border: `1px solid ${meta.color}55`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 32,
               flexShrink: 0,
             }}>
-              {meta.icon}
+              <FolderIcon color={meta.color} size={64} />
             </div>
             <div style={{
               fontSize: 12,
@@ -429,8 +476,23 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery }) {
         )
       })}
 
+      {isRoot && filteredFiles.length > 0 && filteredFolders.length > 0 && (
+        <div style={{
+          gridColumn: '1 / -1',
+          paddingTop: 8,
+          paddingBottom: 4,
+          fontSize: 10,
+          fontWeight: 700,
+          color: 'rgba(255,255,255,0.22)',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          Unorganized
+        </div>
+      )}
+
       {filteredFiles.map((file, idx) => {
-        const { icon, color } = fileIconMap(file.mime_type)
         const hasThumb = !!file.thumbnail_url
         return (
           <div
@@ -460,12 +522,9 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery }) {
               width: 80,
               height: 80,
               borderRadius: 12,
-              background: hasThumb ? 'transparent' : color + '22',
-              border: hasThumb ? 'none' : `1px solid ${color}44`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: hasThumb ? 0 : 32,
               flexShrink: 0,
               overflow: 'hidden',
             }}>
@@ -476,12 +535,15 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery }) {
                   style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }}
                   onError={e => {
                     e.currentTarget.style.display = 'none'
-                    e.currentTarget.parentElement.style.fontSize = '32px'
-                    e.currentTarget.parentElement.textContent = icon
+                    e.currentTarget.parentElement.innerHTML = ''
+                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+                    svg.setAttribute('width', '64')
+                    svg.setAttribute('height', '64')
+                    e.currentTarget.parentElement.appendChild(svg)
                   }}
                 />
               ) : (
-                icon
+                <FileIcon mimeType={file.mime_type || ''} size={64} />
               )}
             </div>
             <div style={{
@@ -507,7 +569,7 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery }) {
 
 // ─── List View ────────────────────────────────────────────────────────────────
 
-function ListView({ folders, files, onFolderClick, searchQuery }) {
+function ListView({ folders, files, onFolderClick, searchQuery, isRoot }) {
   const [sortKey, setSortKey]   = useState('name')
   const [sortDir, setSortDir]   = useState('asc')
 
@@ -567,7 +629,9 @@ function ListView({ folders, files, onFolderClick, searchQuery }) {
         height: 280,
         gap: 10,
       }}>
-        <div style={{ fontSize: 36, opacity: 0.12 }}>📂</div>
+        <div style={{ opacity: 0.18 }}>
+          <FolderIcon color="#6B7280" size={48} />
+        </div>
         <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>
           {searchQuery ? 'No results for "' + searchQuery + '"' : 'This folder is empty'}
         </div>
@@ -616,7 +680,9 @@ function ListView({ folders, files, onFolderClick, searchQuery }) {
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', minWidth: 0 }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>{meta.icon}</span>
+              <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <FolderIcon color={meta.color} size={24} />
+              </span>
               <span style={{
                 fontSize: 13,
                 color: 'rgba(255,255,255,0.82)',
@@ -636,9 +702,24 @@ function ListView({ folders, files, onFolderClick, searchQuery }) {
         )
       })}
 
+      {/* Unorganized section header at root */}
+      {isRoot && sortedFiles.length > 0 && filteredFolders.length > 0 && (
+        <div style={{
+          padding: '10px 14px 4px',
+          fontSize: 10,
+          fontWeight: 700,
+          color: 'rgba(255,255,255,0.22)',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          marginTop: 4,
+        }}>
+          Unorganized
+        </div>
+      )}
+
       {/* File rows */}
       {sortedFiles.map((file, idx) => {
-        const { icon, color } = fileIconMap(file.mime_type)
         return (
           <div
             key={file.id || idx}
@@ -656,7 +737,9 @@ function ListView({ folders, files, onFolderClick, searchQuery }) {
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', minWidth: 0 }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+              <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <FileIcon mimeType={file.mime_type || ''} size={24} />
+              </span>
               <span style={{
                 fontSize: 13,
                 color: 'rgba(255,255,255,0.75)',
@@ -707,7 +790,9 @@ function NewFolderInput({ onSubmit, onCancel }) {
       borderBottom: '1px solid rgba(255,255,255,0.06)',
       background: 'rgba(124,106,247,0.06)',
     }}>
-      <span style={{ fontSize: 18 }}>📁</span>
+      <span style={{ display: 'flex', alignItems: 'center' }}>
+        <FolderIcon color="#7C6AF7" size={24} />
+      </span>
       <input
         ref={inputRef}
         value={name}
@@ -831,6 +916,7 @@ export default function Files() {
   useEffect(() => {
     if (!treeLoading && currentFolderId === null) {
       // Show tree root folders as "folders" and any unorganized files
+      setContentsLoading(true)
       driveGet('/drive/tree')
         .then(data => {
           const topFolders = Array.isArray(data) ? data : (data?.folders || data?.tree || [])
@@ -918,11 +1004,12 @@ export default function Files() {
           loadContents(currentFolderId)
         } else {
           // Reload root
+          setContentsLoading(true)
           driveGet('/drive/tree').then(data => {
             const topFolders = Array.isArray(data) ? data : (data?.folders || data?.tree || [])
             const unorganized = Array.isArray(data) ? [] : (data?.unorganized || [])
             setFolderContents({ folders: topFolders, files: unorganized })
-          }).catch(() => {})
+          }).catch(() => {}).finally(() => setContentsLoading(false))
         }
       })
       .catch(() => setShowNewFolder(false))
@@ -1304,6 +1391,7 @@ export default function Files() {
                 onFolderClick={folder => navigateTo(folder.id)}
                 isMobile={isMobile}
                 searchQuery={search}
+                isRoot={currentFolderId === null}
               />
             ) : (
               <ListView
@@ -1311,6 +1399,7 @@ export default function Files() {
                 files={folderContents.files}
                 onFolderClick={folder => navigateTo(folder.id)}
                 searchQuery={search}
+                isRoot={currentFolderId === null}
               />
             )}
           </div>
