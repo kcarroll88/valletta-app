@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { api } from '../api'
 import useIsMobile from '../hooks/useIsMobile'
 
@@ -1296,7 +1296,7 @@ function TableView({ tasks, onTaskClick, onUpdateTask, onAddTask, isMobile }) {
         </thead>
         <tbody>
           {groups.map(({ status, rows }) => (
-            <>
+            <React.Fragment key={status ?? '__all__'}>
               {/* Group header row (only when sorting by status) */}
               {groupedByStatus && status && (
                 <tr key={`group-${status}`} style={{ background: STATUS_COLOR[status] + '18' }}>
@@ -1380,7 +1380,7 @@ function TableView({ tasks, onTaskClick, onUpdateTask, onAddTask, isMobile }) {
                   </td>
                 </tr>
               )}
-            </>
+            </React.Fragment>
           ))}
         </tbody>
       </table>
@@ -1681,6 +1681,7 @@ export default function Tasks() {
 
   const [tasks, setTasks]                 = useState([])
   const [loading, setLoading]             = useState(true)
+  const [error, setError]                 = useState(null)
   const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [deleteTarget, setDeleteTarget]   = useState(null)
   const [dragOverStatus, setDragOverStatus] = useState(null)
@@ -1698,17 +1699,19 @@ export default function Tasks() {
   const [filterPriority, setFilterPriority] = useState('all')
   const [filterAssignee, setFilterAssignee] = useState('')
 
-  // ── Bug fix: fetch ALL tasks then filter client-side for top-level (parent_id is null/undefined/0)
-  // Previously the code passed `{ parent_id: 'null' }` which URLSearchParams serialized as the
-  // string "null", causing the backend to return no results if it expected IS NULL.
-  // Now we fetch everything and filter client-side to only keep top-level tasks.
+  // ── Fetch ALL tasks then filter client-side for top-level tasks.
+  // Uses loose equality (== null) to correctly match both null and undefined
+  // without accidentally filtering out tasks whose parent_id is 0.
   const load = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const all = await api.tasks({})
-      // Keep only top-level tasks (no parent)
-      const topLevel = all.filter(t => !t.parent_id)
+      const topLevel = all.filter(t => t.parent_id == null)
       setTasks(topLevel)
+    } catch(e) {
+      console.error('Tasks load error:', e)
+      setError(e.message)
     } finally {
       setLoading(false)
     }
@@ -1864,6 +1867,33 @@ export default function Tasks() {
       {loading ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 16 }}>
           Loading tasks…
+        </div>
+      ) : error ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{
+            background: 'rgba(248,113,113,0.12)',
+            border: '1px solid rgba(248,113,113,0.4)',
+            borderRadius: 12,
+            padding: '24px 32px',
+            textAlign: 'center',
+            maxWidth: 420,
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>⚠</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#f87171', marginBottom: 6 }}>
+              Failed to load tasks
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(248,113,113,0.8)', marginBottom: 18 }}>
+              {error}
+            </div>
+            <button
+              onClick={load}
+              style={{
+                background: 'rgba(248,113,113,0.2)', border: '1px solid rgba(248,113,113,0.4)',
+                borderRadius: 8, color: '#f87171', fontSize: 13,
+                cursor: 'pointer', padding: '8px 20px',
+              }}
+            >Retry</button>
+          </div>
         </div>
       ) : isMobile ? (
         /* Mobile view — always uses kanban-style tab view */
