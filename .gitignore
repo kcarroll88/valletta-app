@@ -1,0 +1,61 @@
+# Secrets & environment
+.env
+db/integrations/google_credentials.json
+
+# Database (live data — never in git, transfer manually)
+db/valletta.db
+db/valletta.db-shm
+db/valletta.db-wal
+
+# Logs
+db/logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Node / frontend
+app/node_modules/
+app/dist/
+
+# Bot lock files
+*.lock
+
+# Large binary / mail archives
+*.mbox
+
+# Media & audio assets (large binaries — manage separately)
+Videos/
+Audio Clips/
+Music/
+Photos/
+Assets/
+uploads/
+*.mov
+*.mp4
+*.wav
+*.aif
+*.aiff
+*.mp3
+*.zip
+*.pdf
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
