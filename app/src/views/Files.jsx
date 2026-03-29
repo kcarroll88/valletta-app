@@ -141,6 +141,13 @@ function findFolder(tree, id) {
   return null
 }
 
+// Recursively sum file_count for a folder and all its descendants
+function totalFileCount(folder) {
+  const direct = folder.file_count || 0
+  const nested = (folder.children || []).reduce((sum, child) => sum + totalFileCount(child), 0)
+  return direct + nested
+}
+
 // ─── Pure CSS Icon Components ─────────────────────────────────────────────────
 
 function FolderIcon({ color = '#4A90D9', size = 48 }) {
@@ -329,7 +336,7 @@ function SidebarTree({ tree, activeFolderId, onSelect }) {
           </span>
 
           {/* File count badge */}
-          {folder.file_count != null && folder.file_count > 0 && (
+          {totalFileCount(folder) > 0 && (
             <span style={{
               fontSize: 10,
               color: 'rgba(255,255,255,0.22)',
@@ -338,7 +345,7 @@ function SidebarTree({ tree, activeFolderId, onSelect }) {
               borderRadius: 8,
               padding: '1px 5px',
             }}>
-              {folder.file_count}
+              {totalFileCount(folder)}
             </span>
           )}
         </div>
@@ -414,7 +421,7 @@ function Breadcrumb({ path, onNavigate }) {
 
 // ─── Icon View ────────────────────────────────────────────────────────────────
 
-function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot }) {
+function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot, tree }) {
   const filteredFolders = folders.filter(f =>
     !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -453,6 +460,7 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot
     }}>
       {filteredFolders.map(folder => {
         const meta = folderMeta(folder.name)
+        const fullFolder = (tree && findFolder(tree, folder.id)) || folder
         return (
           <div
             key={folder.id}
@@ -501,11 +509,14 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot
             }}>
               {folder.name}
             </div>
-            {folder.file_count != null && (
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>
-                {folder.file_count} {folder.file_count === 1 ? 'file' : 'files'}
-              </div>
-            )}
+            {(() => {
+              const count = totalFileCount(fullFolder)
+              return count > 0 ? (
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>
+                  {count} {count === 1 ? 'file' : 'files'}
+                </div>
+              ) : null
+            })()}
           </div>
         )
       })}
@@ -603,7 +614,7 @@ function IconView({ folders, files, onFolderClick, isMobile, searchQuery, isRoot
 
 // ─── List View ────────────────────────────────────────────────────────────────
 
-function ListView({ folders, files, onFolderClick, searchQuery, isRoot }) {
+function ListView({ folders, files, onFolderClick, searchQuery, isRoot, tree }) {
   const [sortKey, setSortKey]   = useState('name')
   const [sortDir, setSortDir]   = useState('asc')
 
@@ -697,6 +708,8 @@ function ListView({ folders, files, onFolderClick, searchQuery, isRoot }) {
       {/* Folder rows */}
       {filteredFolders.map(folder => {
         const meta = folderMeta(folder.name)
+        const fullFolder = (tree && findFolder(tree, folder.id)) || folder
+        const count = totalFileCount(fullFolder)
         return (
           <div
             key={folder.id}
@@ -729,7 +742,7 @@ function ListView({ folders, files, onFolderClick, searchQuery, isRoot }) {
             </div>
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', padding: '0 14px' }}>Folder</span>
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'right', padding: '0 14px' }}>
-              {folder.file_count != null ? folder.file_count + ' items' : '—'}
+              {count > 0 ? count + ' items' : '—'}
             </span>
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'right', padding: '0 14px' }}>—</span>
           </div>
@@ -927,23 +940,33 @@ export default function Files() {
 
   // ── Load folder contents ───────────────────────────────────────────────────
 
-  const loadContents = useCallback((folderId) => {
+  const loadContents = useCallback(async (folderId) => {
+    if (!folderId) return  // root is handled by the tree useEffect
     setContentsLoading(true)
-    const path = folderId ? `/drive/files?folder_id=${folderId}` : '/drive/files'
-    driveGet(path)
-      .then(data => {
-        // API returns array of files, or { folders, files }
-        if (Array.isArray(data)) {
-          setFolderContents({ folders: [], files: data })
-        } else {
-          setFolderContents({
-            folders: data?.folders || [],
-            files:   data?.files   || [],
-          })
-        }
+    try {
+      const tk = localStorage.getItem('vlt_token')
+      const headers = { Authorization: `Bearer ${tk}` }
+      const [filesRes, treeRes] = await Promise.all([
+        fetch(`/api/drive/files?folder_id=${folderId}`, { headers }),
+        fetch(`/api/drive/tree`, { headers }),
+      ])
+      const filesData = await filesRes.json()
+      const treeData  = await treeRes.json()
+
+      const treeArr = Array.isArray(treeData) ? treeData : (treeData?.folders || treeData?.tree || [])
+      const clickedFolder = findFolder(treeArr, folderId)
+      const children = clickedFolder?.children || []
+
+      setFolderContents({
+        folders: children,
+        files: Array.isArray(filesData) ? filesData : (filesData?.files || []),
       })
-      .catch(() => setFolderContents({ folders: [], files: [] }))
-      .finally(() => setContentsLoading(false))
+    } catch (e) {
+      console.error('loadContents error:', e)
+      setFolderContents({ folders: [], files: [] })
+    } finally {
+      setContentsLoading(false)
+    }
   }, [])
 
   // When tree loads and we're at root, show top-level folders in content area
@@ -1426,6 +1449,7 @@ export default function Files() {
                 isMobile={isMobile}
                 searchQuery={search}
                 isRoot={currentFolderId === null}
+                tree={tree}
               />
             ) : (
               <ListView
@@ -1434,6 +1458,7 @@ export default function Files() {
                 onFolderClick={folder => navigateTo(folder.id)}
                 searchQuery={search}
                 isRoot={currentFolderId === null}
+                tree={tree}
               />
             )}
           </div>
