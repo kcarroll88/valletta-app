@@ -50,7 +50,7 @@ FILES_CONFIG: dict[str, list[dict]] = {
 
 # Token budget: max chars per file, max total chars across all files
 MAX_CHARS_PER_FILE = 8000
-MAX_CHARS_TOTAL    = 32000
+MAX_CHARS_TOTAL    = 16000
 
 # Which platforms + keywords are relevant to each team member
 MEMBER_CONFIG = {

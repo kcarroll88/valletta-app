@@ -2188,6 +2188,16 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
         if prior_context:
             system_prompt += prior_context
 
+        # ── Universal response style rules (appended to every member's prompt) ──
+        system_prompt += """
+
+## Response Style Rules (mandatory)
+- Answer in 2–4 sentences for simple questions. Only go longer when the complexity genuinely requires it.
+- No preamble ("Great question!", "Sure!", "Absolutely!"). Start with your answer.
+- No summary or sign-off at the end. Stop when you've said what needs to be said.
+- If this question belongs to another team member, say so in ONE sentence only (e.g. "That's Marco's call — handing you over.") and stop. Do not attempt to answer the question yourself.
+- No padding, no restating what the user said, no transitional filler."""
+
         member_messages = list(messages) + [{"role": "user", "content": scoped_question}]
 
         # ── Step 1: streaming call with tools ─────────────────────────────────
@@ -2195,7 +2205,7 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
 
         async with async_client.messages.stream(
             model="claude-sonnet-4-6",
-            max_tokens=1024,
+            max_tokens=800,
             system=system_prompt,
             tools=CHAT_TOOLS,
             messages=member_messages,
