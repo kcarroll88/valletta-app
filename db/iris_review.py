@@ -357,6 +357,43 @@ def apply_field_corrections(conn: sqlite3.Connection, corrections: list[dict]) -
     return changes
 
 
+def _ensure_scheduler_state_table(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scheduler_state (
+            key TEXT PRIMARY KEY,
+            last_run_at TEXT,
+            last_data_hash TEXT
+        )
+    """)
+    conn.commit()
+
+
+def _check_iris_skip(conn: sqlite3.Connection) -> bool:
+    """Return True if no contacts have been updated since Iris's last run (skip the API call)."""
+    row = conn.execute("SELECT MAX(updated_at) FROM contacts").fetchone()
+    latest_change = row[0] if row else None
+
+    state = conn.execute(
+        "SELECT last_run_at FROM scheduler_state WHERE key='iris'"
+    ).fetchone()
+    last_run_at = state[0] if state else None
+
+    if last_run_at and latest_change and latest_change <= last_run_at:
+        return True
+    return False
+
+
+def _update_iris_state(conn: sqlite3.Connection) -> None:
+    now = _now_str()
+    conn.execute(
+        """INSERT INTO scheduler_state (key, last_run_at, last_data_hash)
+           VALUES ('iris', ?, NULL)
+           ON CONFLICT(key) DO UPDATE SET last_run_at=excluded.last_run_at""",
+        (now,),
+    )
+    conn.commit()
+
+
 def main():
     _log("=" * 60)
     _log("Iris Review — starting daily contact audit")
@@ -366,6 +403,12 @@ def main():
     conn.row_factory = sqlite3.Row
 
     try:
+        _ensure_scheduler_state_table(conn)
+
+        if _check_iris_skip(conn):
+            _log("No changes since last run — skipping API call")
+            return
+
         contacts = load_contacts(conn)
         _log(f"Loaded {len(contacts)} contacts from DB")
 
@@ -400,6 +443,9 @@ def main():
             f"{correction_changes} field correction(s). "
             f"Total: {total} DB write(s)."
         )
+
+        _update_iris_state(conn)
+        _log("Scheduler state updated.")
 
     finally:
         conn.close()

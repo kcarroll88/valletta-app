@@ -6,10 +6,14 @@ Returns an empty string if no data exists.
 
 import json
 import sqlite3
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+_CONTEXT_CACHE: dict = {}  # {member: {"text": str, "built_at": float}}
+CONTEXT_CACHE_TTL = 1800  # 30 minutes
 
 # Which file categories/keywords are relevant to each team member.
 # Each entry: list of dicts with 'categories' (DB category values) and/or
@@ -551,6 +555,11 @@ def _files_block(member: str, conn: sqlite3.Connection, message: str) -> str | N
 
 
 def build_integration_context(member: str, conn: sqlite3.Connection, message: str = "") -> str:
+    now = time.time()
+    cached = _CONTEXT_CACHE.get(member)
+    if cached and (now - cached["built_at"]) < CONTEXT_CACHE_TTL:
+        return cached["text"]
+
     blocks = []
 
     # ── Integration data (Gmail, Discord, social) ──────────────────────────
@@ -593,11 +602,14 @@ def build_integration_context(member: str, conn: sqlite3.Connection, message: st
         blocks.append(files_block)
 
     if not blocks:
+        _CONTEXT_CACHE[member] = {"text": "", "built_at": now}
         return ""
 
     now_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
-    return (
+    result = (
         f"--- LIVE CONTEXT (as of {now_str}) ---\n"
         + "\n\n".join(blocks)
         + "\n--- END LIVE CONTEXT ---"
     )
+    _CONTEXT_CACHE[member] = {"text": result, "built_at": now}
+    return result

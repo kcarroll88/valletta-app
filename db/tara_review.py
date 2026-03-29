@@ -379,6 +379,56 @@ def apply_task_decisions(conn: sqlite3.Connection, decisions: list[dict]) -> int
     return changes
 
 
+def _ensure_scheduler_state_table(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scheduler_state (
+            key TEXT PRIMARY KEY,
+            last_run_at TEXT,
+            last_data_hash TEXT
+        )
+    """)
+    conn.commit()
+
+
+def _check_tara_skip(conn: sqlite3.Connection) -> bool:
+    """Return True if nothing has changed since Tara's last run (skip the API call)."""
+    row_tasks = conn.execute(
+        "SELECT MAX(updated_at) FROM tasks WHERE status NOT IN ('done','dismissed')"
+    ).fetchone()
+    row_ideas = conn.execute(
+        "SELECT MAX(updated_at) FROM ideas WHERE status NOT IN ('done','dismissed')"
+    ).fetchone()
+
+    ts_tasks = row_tasks[0] if row_tasks else None
+    ts_ideas = row_ideas[0] if row_ideas else None
+
+    # Most recent change across both tables
+    latest_change = max(
+        (t for t in (ts_tasks, ts_ideas) if t is not None),
+        default=None,
+    )
+
+    state = conn.execute(
+        "SELECT last_run_at FROM scheduler_state WHERE key='tara'"
+    ).fetchone()
+    last_run_at = state[0] if state else None
+
+    if last_run_at and latest_change and latest_change <= last_run_at:
+        return True
+    return False
+
+
+def _update_tara_state(conn: sqlite3.Connection) -> None:
+    now = _now_str()
+    conn.execute(
+        """INSERT INTO scheduler_state (key, last_run_at, last_data_hash)
+           VALUES ('tara', ?, NULL)
+           ON CONFLICT(key) DO UPDATE SET last_run_at=excluded.last_run_at""",
+        (now,),
+    )
+    conn.commit()
+
+
 def main():
     _log("=" * 60)
     _log("Tara Review — starting hourly audit")
@@ -388,6 +438,12 @@ def main():
     conn.row_factory = sqlite3.Row
 
     try:
+        _ensure_scheduler_state_table(conn)
+
+        if _check_tara_skip(conn):
+            _log("No changes since last run — skipping API call")
+            return
+
         ideas = load_open_ideas(conn)
         tasks = load_open_tasks(conn)
 
@@ -413,6 +469,9 @@ def main():
 
         total = idea_changes + task_changes
         _log(f"\nDone. {idea_changes} idea change(s), {task_changes} task change(s). Total: {total} DB writes.")
+
+        _update_tara_state(conn)
+        _log("Scheduler state updated.")
 
     finally:
         conn.close()
