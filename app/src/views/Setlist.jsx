@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -68,6 +69,7 @@ function SongRow({ song, index, total, onUpdate, onDelete, onDragStart, onDragEn
   return (
     <div
       onDragOver={e => { e.preventDefault(); onDragEnter(index) }}
+      className="song-row-inner"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -132,6 +134,7 @@ function SongRow({ song, index, total, onUpdate, onDelete, onDragStart, onDragEn
         value={song.notes || ''}
         onChange={e => onUpdate(index, 'notes', e.target.value)}
         placeholder="Notes"
+        className="song-row-notes"
         style={{
           ...fieldStyle,
           flex: '0 1 160px',
@@ -439,6 +442,7 @@ function SetlistEditor({ setlistId, onUpdated }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function Setlist() {
+  const isMobile = useIsMobile()
   const [setlists,   setSetlists]   = useState([])
   const [active,     setActive]     = useState(null)
   const [adding,     setAdding]     = useState(false)
@@ -473,13 +477,13 @@ export default function Setlist() {
   }
 
   return (
-    <div style={{ padding: '32px 40px' }}>
+    <div style={{ padding: isMobile ? '16px 14px' : '32px 40px' }}>
       {adding && (
         <NewSetlistModal onClose={() => setAdding(false)} onSave={handleCreate} />
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, ...(isMobile && { paddingTop: 52 }) }}>
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Setlists</h1>
           <p style={{ color: 'rgba(255,255,255,0.45)', marginTop: 6, fontSize: 14 }}>{setlists.length} setlist{setlists.length !== 1 ? 's' : ''}</p>
@@ -501,11 +505,12 @@ export default function Setlist() {
         display: 'flex',
         gap: 20,
         alignItems: 'flex-start',
-        flexWrap: 'wrap',
+        flexWrap: isMobile ? 'wrap' : 'wrap',
+        flexDirection: isMobile ? 'column' : 'row',
       }}>
         {/* Left — Setlist history */}
         <div style={{
-          width: 280,
+          width: isMobile ? '100%' : 280,
           flexShrink: 0,
           background: 'rgba(255,255,255,0.04)',
           backdropFilter: 'blur(12px)',

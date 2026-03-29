@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -328,6 +329,7 @@ function ContextPanel({ onNavigate }) {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard({ onNavigate }) {
+  const isMobile = useIsMobile()
   const [messages, setMessages]       = useState(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
@@ -809,6 +811,7 @@ export default function Dashboard({ onNavigate }) {
       }}>
 
         {/* ── Left Sidebar — Team Roster ─────────────────────────────────── */}
+        {!isMobile && (
         <div style={{
           width: 200,
           flexShrink: 0,
@@ -882,6 +885,7 @@ export default function Dashboard({ onNavigate }) {
             )
           })}
         </div>
+        )}
 
         {/* ── Center — Chat Thread ───────────────────────────────────────── */}
         <div
@@ -898,7 +902,7 @@ export default function Dashboard({ onNavigate }) {
           {/* Header */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '14px 24px',
+            padding: isMobile ? '14px 24px 14px 64px' : '14px 24px',
             borderBottom: '1px solid rgba(255,255,255,0.06)',
             flexShrink: 0,
             background: 'rgba(10,10,18,0.70)',
@@ -965,7 +969,7 @@ export default function Dashboard({ onNavigate }) {
             style={{
               flex: 1,
               overflowY: 'auto',
-              padding: '24px 32px',
+              padding: isMobile ? '16px 16px' : '24px 32px',
               display: 'flex',
               flexDirection: 'column',
               gap: 4,
@@ -1086,7 +1090,7 @@ export default function Dashboard({ onNavigate }) {
                         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', paddingRight: 2 }}>{fmtTime(m.ts)}</div>
                       )}
                       <div style={{
-                        maxWidth: 560,
+                        maxWidth: isMobile ? '85vw' : 560,
                         background: 'linear-gradient(135deg, rgba(124,106,247,0.25) 0%, rgba(99,102,241,0.20) 100%)',
                         border: '1px solid rgba(124,106,247,0.35)',
                         borderRadius: '18px 18px 4px 18px',
@@ -1098,6 +1102,7 @@ export default function Dashboard({ onNavigate }) {
                         color: 'rgba(255,255,255,0.88)',
                         lineHeight: 1.6,
                         whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
                       }}>
                         {m.text || m.content}
                       </div>
@@ -1158,7 +1163,7 @@ export default function Dashboard({ onNavigate }) {
                         )}
                       </div>
                       <div style={{
-                        maxWidth: 640,
+                        maxWidth: isMobile ? '90vw' : 640,
                         background: 'rgba(255,255,255,0.04)',
                         border: `1px solid ${m.error ? '#f8717144' : 'rgba(255,255,255,0.09)'}`,
                         borderRadius: '4px 18px 18px 18px',
@@ -1169,6 +1174,7 @@ export default function Dashboard({ onNavigate }) {
                         fontSize: 13.5,
                         color: m.error ? '#f87171' : 'rgba(255,255,255,0.88)',
                         lineHeight: 1.6,
+                        wordBreak: 'break-word',
                       }}>
                         {m.text ? (
                           <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
@@ -1195,7 +1201,7 @@ export default function Dashboard({ onNavigate }) {
           {/* ── Input Bar ─────────────────────────────────────────────────── */}
           <div style={{
             borderTop: '1px solid rgba(255,255,255,0.06)',
-            padding: '12px 24px 16px',
+            padding: isMobile ? '10px 12px 12px' : '12px 24px 16px',
             flexShrink: 0,
             background: 'rgba(10,10,18,0.70)',
             backdropFilter: 'blur(16px)',
@@ -1343,8 +1349,8 @@ export default function Dashboard({ onNavigate }) {
           </div>
         </div>
 
-        {/* ── Right Panel — Context ──────────────────────────────────────── */}
-        <ContextPanel onNavigate={onNavigate} />
+        {/* ── Right Panel — Context (hidden on mobile) ──────────────────── */}
+        {!isMobile && <ContextPanel onNavigate={onNavigate} />}
       </div>
     </>
   )

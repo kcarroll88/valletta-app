@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 const TYPE_COLOR = {
   show: '#a89fff', rehearsal: '#4ade80', recording: '#fbbf24',
@@ -430,6 +431,7 @@ function CalendarGrid({ events, month, year, onDayClick, onEventClick }) {
 }
 
 export default function Calendar() {
+  const isMobile = useIsMobile()
   const [events,    setEvents]    = useState([])
   const [filter,    setFilter]    = useState('')
   const [adding,    setAdding]    = useState(false)
@@ -438,7 +440,7 @@ export default function Calendar() {
   const [deleting,  setDeleting]  = useState(null)
   const [googleEvent, setGoogleEvent] = useState(null)
   const [loading,   setLoading]   = useState(true)
-  const [viewMode,  setViewMode]  = useState('calendar') // 'calendar' | 'list'
+  const [viewMode,  setViewMode]  = useState(() => typeof window !== 'undefined' && window.innerWidth < 768 ? 'list' : 'calendar') // default 'list' on mobile
   const [calMonth,  setCalMonth]  = useState(new Date().getMonth())
   const [calYear,   setCalYear]   = useState(new Date().getFullYear())
   const [toast,     setToast]     = useState(null) // { message, type }
@@ -509,7 +511,7 @@ export default function Calendar() {
   const initialForm = addDate ? { title: '', start_dt: addDate, event_type: 'show', location: '', description: '' } : null
 
   return (
-    <div style={{ padding: 'clamp(16px, 3vw, 40px)', width: '100%', boxSizing: 'border-box', minWidth: 0 }}>
+    <div style={{ padding: 'clamp(16px, 3vw, 40px)', width: '100%', boxSizing: 'border-box', minWidth: 0, ...(isMobile && { paddingTop: 68 }) }}>
       {/* Success / error toast */}
       {toast && (
         <div style={{

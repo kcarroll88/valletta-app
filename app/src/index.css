@@ -16,3 +16,44 @@ body {
 ::-webkit-scrollbar       { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #1c1c24; }
 ::-webkit-scrollbar-thumb { background: #56567a; border-radius: 3px; }
+
+/* ── Mobile Base ── */
+@media (max-width: 767px) {
+  /* Ensure full-width scrolling */
+  * { box-sizing: border-box; }
+
+  /* Prevent horizontal overflow at root */
+  #root { overflow-x: hidden; }
+
+  /* Touch-friendly minimum tap targets */
+  button { min-height: 36px; }
+
+  /* Prevent text overflow */
+  .mobile-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Task row: allow action buttons to wrap on mobile */
+  .task-actions {
+    flex-wrap: wrap !important;
+    max-width: none !important;
+    justify-content: flex-end;
+  }
+
+  /* Filter pills: ensure touch-friendly */
+  .filter-pill {
+    min-height: 36px !important;
+    padding: 6px 12px !important;
+  }
+
+  /* Setlist song row: stack title and notes on mobile */
+  .song-row-inner {
+    flex-wrap: wrap !important;
+  }
+  .song-row-notes {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+}

@@ -101,7 +101,17 @@ function AskTeamButton({ onChatOpen }) {
   )
 }
 
-export default function Sidebar({ active, onNav, onLogout, onChatOpen }) {
+export default function Sidebar({ active, onNav, onLogout, onChatOpen, isMobile, sidebarOpen, setSidebarOpen }) {
+  const mobileStyle = isMobile ? {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    zIndex: 1000,
+    width: 280,
+    transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+    transition: 'transform 0.25s ease',
+  } : {}
+
   return (
     <aside style={{
       width: 220,
@@ -118,23 +128,44 @@ export default function Sidebar({ active, onNav, onLogout, onChatOpen }) {
       flexDirection: 'column',
       padding: '24px 0',
       flexShrink: 0,
+      ...mobileStyle,
     }}>
-      {/* Wordmark */}
-      <div style={{ padding: '0 24px 32px' }}>
-        <div style={{
-          fontSize: 18,
-          fontWeight: 700,
-          letterSpacing: '0.20em',
-          background: 'linear-gradient(135deg, #ffffff 0%, #c4b5fd 50%, #a89fff 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-        }}>
-          VALLETTA
+      {/* Wordmark + close button on mobile */}
+      <div style={{ padding: '0 24px 32px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{
+            fontSize: 18,
+            fontWeight: 700,
+            letterSpacing: '0.20em',
+            background: 'linear-gradient(135deg, #ffffff 0%, #c4b5fd 50%, #a89fff 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}>
+            VALLETTA
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.20em', marginTop: 2 }}>
+            COMMAND CENTER
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.20em', marginTop: 2 }}>
-          COMMAND CENTER
-        </div>
+        {isMobile && (
+          <button
+            onClick={() => setSidebarOpen(false)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'rgba(255,255,255,0.55)',
+              fontSize: 20,
+              cursor: 'pointer',
+              padding: '0 4px',
+              lineHeight: 1,
+              marginTop: 2,
+            }}
+            aria-label="Close menu"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Nav */}
@@ -152,7 +183,7 @@ export default function Sidebar({ active, onNav, onLogout, onChatOpen }) {
                 icon={icon}
                 isActive={active === id}
                 isTeam={id === 'team'}
-                onClick={() => onNav(id)}
+                onClick={() => { onNav(id); if (isMobile && setSidebarOpen) setSidebarOpen(false) }}
               />
             ))}
           </div>

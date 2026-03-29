@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -314,6 +315,7 @@ function FileList({ files, folderName, loading }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function Files() {
+  const isMobile = useIsMobile()
   const [tree,           setTree]           = useState([])
   const [treeLoading,    setTreeLoading]    = useState(true)
   const [treeError,      setTreeError]      = useState(null)
@@ -325,6 +327,7 @@ export default function Files() {
 
   const [syncing,        setSyncing]        = useState(false)
   const [syncMsg,        setSyncMsg]        = useState('')
+  const [mobileFolderOpen, setMobileFolderOpen] = useState(false)
 
   // Load drive tree on mount
   useEffect(() => {
@@ -440,10 +443,10 @@ export default function Files() {
 
   // Full layout
   return (
-    <div style={{ padding: '32px 40px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
+    <div style={{ padding: isMobile ? '16px 14px' : '32px 40px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexShrink: 0, ...(isMobile && { paddingTop: 52 }) }}>
         <div>
           <h1 style={{
             fontSize: 28,
@@ -494,6 +497,64 @@ export default function Files() {
         </button>
       </div>
 
+      {/* Mobile: folder browse button + bottom-sheet overlay */}
+      {isMobile && (
+        <div style={{ marginBottom: 12, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={() => setMobileFolderOpen(true)}
+              style={{
+                background: 'rgba(124,106,247,0.12)',
+                border: '1px solid rgba(124,106,247,0.28)',
+                borderRadius: 8,
+                color: '#a89fff',
+                padding: '7px 14px',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              ◫ Browse Folders
+            </button>
+            {activeFolder && (
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', fontWeight: 600 }}>
+                {activeFolder.name}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile folder tree bottom sheet */}
+      {isMobile && mobileFolderOpen && (
+        <>
+          <div
+            onClick={() => setMobileFolderOpen(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 500 }}
+          />
+          <div style={{
+            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 501,
+            background: 'rgba(12,12,20,0.97)',
+            backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+            borderTop: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: '16px 16px 0 0',
+            maxHeight: '70vh',
+            overflowY: 'auto',
+            padding: '12px 0 24px',
+          }}>
+            <div style={{ padding: '0 16px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>Folders</span>
+              <button onClick={() => setMobileFolderOpen(false)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.55)', fontSize: 20, cursor: 'pointer', padding: 0 }}>✕</button>
+            </div>
+            <FolderTree
+              tree={tree}
+              activeFolderId={activeFolder?.id}
+              onSelect={(folder) => { handleSelectFolder(folder); setMobileFolderOpen(false) }}
+            />
+          </div>
+        </>
+      )}
+
       {/* Body — sidebar + panel */}
       <div style={{
         flex: 1,
@@ -504,7 +565,8 @@ export default function Files() {
         minHeight: 0,
       }}>
 
-        {/* Folder sidebar */}
+        {/* Folder sidebar — hidden on mobile */}
+        {!isMobile && (
         <div style={{
           width: 220,
           flexShrink: 0,
@@ -528,6 +590,7 @@ export default function Files() {
             />
           )}
         </div>
+        )}
 
         {/* File panel */}
         <div style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>

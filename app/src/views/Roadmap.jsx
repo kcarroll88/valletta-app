@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_H = 56 // px per month row
@@ -487,6 +488,7 @@ function AddItemModal({ prefill, onClose, onSave }) {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export default function Roadmap({ onNavigate }) {
+  const isMobile = useIsMobile()
   const [year,        setYear]        = useState(2026)
   const [data,        setData]        = useState({ tasks: [], events: [] })
   const [loading,     setLoading]     = useState(true)
@@ -736,6 +738,141 @@ export default function Roadmap({ onNavigate }) {
   })
 
   const totalItems = data.tasks.length + data.events.length
+
+  // ─── Mobile list view ──────────────────────────────────────────────────────
+  if (isMobile) {
+    // Gather all items grouped by month
+    const allItems = [
+      ...data.tasks.map(t => ({ item: t, isEvent: false })),
+      ...data.events.map(e => ({ item: e, isEvent: true })),
+    ]
+
+    // Group by month
+    const byMonth = {}
+    allItems.forEach(({ item, isEvent }) => {
+      const monthNum = isEvent
+        ? (item.start_dt ? parseInt(item.start_dt.slice(5, 7), 10) : null)
+        : (item.start_date || item.due_date ? parseInt((item.start_date || item.due_date).slice(5, 7), 10) : null)
+      if (!monthNum) return
+      if (!byMonth[monthNum]) byMonth[monthNum] = []
+      byMonth[monthNum].push({ item, isEvent })
+    })
+
+    const sortedMonths = Object.keys(byMonth).map(Number).sort((a, b) => a - b)
+
+    return (
+      <div style={{ padding: '16px 14px' }}>
+        {/* Modals */}
+        {popover && (
+          <ItemPopover
+            item={popover.item}
+            isEvent={popover.isEvent}
+            onClose={() => setPopover(null)}
+            onEdit={() => setEditing({ item: popover.item, isEvent: popover.isEvent })}
+            onDelete={() => setEditing({ item: popover.item, isEvent: popover.isEvent, deleteMode: true })}
+            onNavigate={onNavigate || (() => {})}
+          />
+        )}
+        {editing && (
+          <EditItemModal
+            item={editing.item}
+            isEvent={editing.isEvent}
+            onClose={() => setEditing(null)}
+            onSave={handleEditSave}
+            onDelete={handleDelete}
+          />
+        )}
+        {adding && (
+          <AddItemModal
+            prefill={typeof adding === 'object' ? adding : null}
+            onClose={() => setAdding(null)}
+            onSave={handleAddSave}
+          />
+        )}
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, paddingTop: 52 }}>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Roadmap</h1>
+            <p style={{ color: 'rgba(255,255,255,0.45)', marginTop: 6, fontSize: 14 }}>{totalItems} items · {year}</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexDirection: 'column', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 8, overflow: 'hidden' }}>
+              {[2025, 2026, 2027].map((y, i) => (
+                <button key={y} onClick={() => setYear(y)} style={{
+                  background: year === y ? '#7c6af722' : 'transparent',
+                  border: 'none',
+                  borderRight: i < 2 ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                  color: year === y ? '#a89fff' : 'rgba(255,255,255,0.45)',
+                  padding: '7px 12px', fontSize: 12, fontWeight: year === y ? 600 : 400, cursor: 'pointer',
+                }}>{y}</button>
+              ))}
+            </div>
+            <button onClick={() => setAdding(true)} style={saveBtnStyle}>+ Add</button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>Loading…</div>
+        ) : totalItems === 0 ? (
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 14, padding: '20px 0' }}>No items for {year}.</div>
+        ) : (
+          sortedMonths.map(month => (
+            <div key={month} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
+                {MONTHS[month - 1]}
+              </div>
+              {byMonth[month].map(({ item, isEvent }, idx) => {
+                const color = isEvent ? CAT_COLOR.show : (CAT_COLOR[item.roadmap_category] || '#9595b8')
+                const catLabel = isEvent ? 'Show' : (CATEGORIES.find(c => c.key === item.roadmap_category)?.label || item.roadmap_category || '')
+                const dateStr = isEvent
+                  ? (item.start_dt ? item.start_dt.slice(5, 10) : '')
+                  : (item.due_date ? item.due_date.slice(5, 10) : '')
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setPopover({ item, isEvent })}
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderLeft: `3px solid ${color}`,
+                      borderRadius: 8,
+                      padding: '10px 14px',
+                      marginBottom: 8,
+                      cursor: 'pointer',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.88)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.title}
+                      </span>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 7px',
+                        borderRadius: 4, color, background: `${color}22`,
+                        border: `1px solid ${color}44`, flexShrink: 0,
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
+                      }}>
+                        {catLabel}
+                      </span>
+                    </div>
+                    {dateStr && (
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.40)', marginTop: 3 }}>{dateStr}</div>
+                    )}
+                    {!isEvent && item.status && (
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{item.status.replace('_', ' ')}</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ))
+        )}
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: '32px 40px' }}>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from './api'
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
+import useIsMobile from './hooks/useIsMobile'
 import GlobalChat from './components/GlobalChat'
 import Dashboard from './views/Dashboard'
 import Files from './views/Files'
@@ -34,12 +35,15 @@ export default function App() {
   const [view,          setView]          = useState('dashboard')
   const [chatOpen,      setChatOpen]      = useState(false)
   const [ideasRefreshKey, setIdeasRefreshKey] = useState(0)
+  const [sidebarOpen,   setSidebarOpen]   = useState(false)
+  const isMobile = useIsMobile()
 
   const navigateTo = (target) => {
     if (target === 'ideas') {
       setIdeasRefreshKey(k => k + 1)
     }
     setView(target)
+    if (isMobile) setSidebarOpen(false)
   }
 
   // Verify token on load (also handles ?token= redirect from Google OAuth callback)
@@ -102,8 +106,64 @@ export default function App() {
         * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
         ::selection { background: rgba(124,106,247,0.35); color: #fff; }
       `}</style>
-      <Sidebar active={view} onNav={navigateTo} onLogout={handleLogout} onChatOpen={() => setChatOpen(true)} />
-      <main className="flex-1 overflow-auto" style={{ minWidth: 0 }}>
+
+      {/* Mobile backdrop overlay */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            zIndex: 999,
+          }}
+        />
+      )}
+
+      <Sidebar
+        active={view}
+        onNav={navigateTo}
+        onLogout={handleLogout}
+        onChatOpen={() => setChatOpen(true)}
+        isMobile={isMobile}
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+      />
+
+      <main
+        className="flex-1 overflow-auto"
+        style={{ minWidth: 0, ...(isMobile && { marginLeft: 0 }) }}
+      >
+        {/* Mobile hamburger button */}
+        {isMobile && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            style={{
+              position: 'fixed',
+              top: 12,
+              left: 12,
+              zIndex: 998,
+              width: 40,
+              height: 40,
+              background: 'rgba(15,15,22,0.90)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10,
+              color: 'rgba(255,255,255,0.75)',
+              fontSize: 18,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            }}
+            aria-label="Open menu"
+          >
+            ☰
+          </button>
+        )}
         <View key={view === 'ideas' ? ideasRefreshKey : undefined} onNavigate={navigateTo} />
       </main>
       <GlobalChat

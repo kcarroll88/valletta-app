@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -207,12 +208,12 @@ function CategoryBar({ name, amount, max, isIncome }) {
   )
 }
 
-function CategoryBreakdowns({ incomeCategories = [], expenseCategories = [] }) {
+function CategoryBreakdowns({ incomeCategories = [], expenseCategories = [], isMobile = false }) {
   const maxIncome = Math.max(...incomeCategories.map(c => c.amount || 0), 1)
   const maxExpense = Math.max(...expenseCategories.map(c => c.amount || 0), 1)
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 24 }}>
       {/* Income */}
       <div style={{ ...GLASS_CARD }}>
         <div style={{
@@ -460,6 +461,7 @@ function RawEntriesTable({ entries }) {
 // ─── Main Finance view ────────────────────────────────────────────────────────
 
 export default function Finance({ onNavigate }) {
+  const isMobile = useIsMobile()
   const [year,    setYear]    = useState(new Date().getFullYear())
   const [years,   setYears]   = useState([])
   const [data,    setData]    = useState(null)
@@ -493,10 +495,10 @@ export default function Finance({ onNavigate }) {
   const displayYears = years.length > 0 ? years : [2024, 2025]
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: isMobile ? '16px 16px' : '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
 
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
+      <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 0, justifyContent: 'space-between', marginBottom: 32 }}>
         <div>
           <h1 style={{
             fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', margin: 0,
@@ -603,8 +605,8 @@ export default function Finance({ onNavigate }) {
       {/* ── Dashboard content ── */}
       {!loading && (data?.summary || data?.raw_entries?.length > 0) && (
         <>
-          {/* Row 1: Stat cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+          {/* Row 1: Stat cards — 1 col on mobile, 3 on desktop */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
             <StatCard label="Total Income"   amount={data.summary?.income   || 0} color="#4ade80" />
             <StatCard label="Total Expenses" amount={data.summary?.expenses || 0} color="#f87171" />
             <StatCard
@@ -614,23 +616,30 @@ export default function Finance({ onNavigate }) {
             />
           </div>
 
-          {/* Row 2: Monthly bar chart */}
+          {/* Row 2: Monthly bar chart — horizontal scroll on mobile */}
           {data.monthly && data.monthly.length > 0 && (
-            <div style={{ position: 'relative' }}>
-              <MonthlyChart monthly={data.monthly} />
+            <div style={{ position: 'relative', ...(isMobile && { overflowX: 'auto' }) }}>
+              <div style={isMobile ? { minWidth: 480 } : {}}>
+                <MonthlyChart monthly={data.monthly} />
+              </div>
             </div>
           )}
 
-          {/* Row 3: Category breakdowns */}
+          {/* Row 3: Category breakdowns — 1 col on mobile */}
           {(data.income_categories?.length > 0 || data.expense_categories?.length > 0) && (
             <CategoryBreakdowns
               incomeCategories={data.income_categories || []}
               expenseCategories={data.expense_categories || []}
+              isMobile={isMobile}
             />
           )}
 
-          {/* Row 4: Shows table */}
-          {data.shows?.length > 0 && <ShowsTable shows={data.shows} />}
+          {/* Row 4: Shows table — horizontal scroll on mobile */}
+          {data.shows?.length > 0 && (
+            <div style={isMobile ? { overflowX: 'auto' } : {}}>
+              <ShowsTable shows={data.shows} />
+            </div>
+          )}
 
           {/* Row 5: Budget vs Actuals */}
           {data.budget_vs_actuals?.length > 0 && <BudgetVsActuals items={data.budget_vs_actuals} />}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 const CATEGORIES = ['Song Idea', 'Marketing', 'Show', 'Visual', 'Other']
 
@@ -391,6 +392,7 @@ function IdeaCard({ idea, onArchive, onRestore, onPromote, onMoveToBacklog, onDi
 }
 
 export default function Ideas() {
+  const isMobile = useIsMobile()
   const [ideas,        setIdeas]        = useState([])
   const [allIdeas,     setAllIdeas]     = useState([])
   const [tab,          setTab]          = useState('inbox') // 'inbox' | 'open' | 'archived'
@@ -456,7 +458,7 @@ export default function Ideas() {
   const openCount = ideas.filter(i => i.status === 'open').length
 
   return (
-    <div style={{ padding: '32px 40px' }}>
+    <div style={{ padding: isMobile ? '16px 14px' : '32px 40px' }}>
       {adding && (
         <NewIdeaModal onClose={() => setAdding(false)} onSave={handleCreate} />
       )}
@@ -470,7 +472,7 @@ export default function Ideas() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, ...(isMobile && { paddingTop: 52 }) }}>
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Ideas</h1>
           <p style={{ color: 'rgba(255,255,255,0.45)', marginTop: 6, fontSize: 14 }}>
@@ -562,7 +564,7 @@ export default function Ideas() {
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))',
           gap: 16,
         }}>
           {ideas.map(idea => (

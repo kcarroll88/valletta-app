@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 const GLASS_CARD = {
   background: 'rgba(255,255,255,0.03)',
@@ -684,6 +685,7 @@ function RecentPosts({ posts }) {
 // ─── Main Insights view ───────────────────────────────────────────────────────
 
 export default function Insights({ onNavigate }) {
+  const isMobile = useIsMobile()
   const [data,         setData]         = useState(null)
   const [loading,      setLoading]      = useState(true)
   const [syncing,      setSyncing]      = useState(false)
@@ -838,10 +840,10 @@ export default function Insights({ onNavigate }) {
   }
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: isMobile ? '16px 14px' : '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
 
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 32 }}>
+      <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'flex-start', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 0, justifyContent: 'space-between', marginBottom: 32, ...(isMobile && { paddingTop: 52 }) }}>
         <div>
           <h1 style={{
             fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', margin: 0,
@@ -888,7 +890,7 @@ export default function Insights({ onNavigate }) {
 
       {/* ── Loading state ── */}
       {loading && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
           {[0, 1, 2].map(i => (
             <div key={i} style={{ ...GLASS_CARD, minHeight: 200 }}>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.20)', paddingTop: 40, textAlign: 'center' }}>
@@ -909,7 +911,7 @@ export default function Insights({ onNavigate }) {
         <>
           {/* Platform cards */}
           {anyConnected ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
               {PLATFORMS.map(platform => (
                 <PlatformCard
                   key={platform}

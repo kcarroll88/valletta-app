@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 // ─── Shared Constants ─────────────────────────────────────────────────────────
 
@@ -370,6 +371,7 @@ function OutreachLogForm({ onSubmit }) {
 // ─── Company Detail Modal ─────────────────────────────────────────────────────
 
 function CompanyDetailModal({ source, contacts = [], onClose, onStatusChange, onPersonAdded }) {
+  const isMobile = useIsMobile()
   const [outreach,        setOutreach]        = useState([])
   const [loadingLog,      setLoadingLog]      = useState(true)
   const [status,          setStatus]          = useState(source.outreach_status || 'not_contacted')
@@ -411,12 +413,42 @@ function CompanyDetailModal({ source, contacts = [], onClose, onStatusChange, on
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', zIndex: 200 }}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.72)',
+        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: isMobile ? 'flex-end' : 'flex-start',
+        justifyContent: isMobile ? 'stretch' : 'flex-end',
+        zIndex: 200,
+      }}
       onClick={onClose}
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{ width: 520, maxWidth: '95vw', height: '100vh', overflowY: 'auto', background: 'rgba(12,12,20,0.85)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderLeft: '1px solid rgba(255,255,255,0.10)', display: 'flex', flexDirection: 'column' }}
+        style={isMobile ? {
+          width: '100%',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          background: 'rgba(12,12,20,0.95)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderTop: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '16px 16px 0 0',
+          display: 'flex',
+          flexDirection: 'column',
+        } : {
+          width: 520,
+          maxWidth: '95vw',
+          height: '100vh',
+          overflowY: 'auto',
+          background: 'rgba(12,12,20,0.85)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderLeft: '1px solid rgba(255,255,255,0.10)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
       >
         {/* Header */}
         <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, background: 'rgba(12,12,20,0.90)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', zIndex: 10 }}>
@@ -1828,12 +1860,13 @@ function PeopleTab() {
 // ════════════════════════════════════════════════════════════════════════════════
 
 export default function Contacts() {
+  const isMobile = useIsMobile()
   const [tab, setTab] = useState('people')
 
   return (
-    <div style={{ padding: '32px 36px', minHeight: '100vh' }}>
+    <div style={{ padding: isMobile ? '16px 14px' : '32px 36px', minHeight: '100vh' }}>
       {/* Page header */}
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 24, ...(isMobile && { paddingTop: 52 }) }}>
         <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
           Contacts
         </h1>

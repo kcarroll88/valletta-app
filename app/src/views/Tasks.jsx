@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import useIsMobile from '../hooks/useIsMobile'
 
 const STATUS_COLOR = { todo: '#9595b8', in_progress: '#7c6af7', done: '#4ade80', blocked: '#f87171', backlog: '#56567a' }
 const STATUS_LABEL = { todo: 'To Do', in_progress: 'In Progress', done: 'Done', blocked: 'Blocked', backlog: 'Backlog' }
@@ -228,7 +229,7 @@ function TaskRow({ task, onEdit, onDelete, onStatusChange, onAddSubtask }) {
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', maxWidth: 'min-content' }}>
           <select
             value={task.status}
             onChange={e => onStatusChange(task.id, e.target.value)}
@@ -415,6 +416,7 @@ function BacklogSection({ tasks, collapsed, onToggle, onEdit, onDelete, onStatus
 const ACTIVE_STATUSES = ['todo', 'in_progress', 'blocked', 'done']
 
 export default function Tasks() {
+  const isMobile = useIsMobile()
   const [tasks,       setTasks]       = useState([])
   const [priority,    setPriority]    = useState('')
   const [adding,      setAdding]      = useState(false)
@@ -478,13 +480,13 @@ export default function Tasks() {
   const openCount = tasks.filter(t => t.status !== 'done' && t.status !== 'backlog').length
 
   return (
-    <div style={{ padding: '32px 40px' }}>
+    <div style={{ padding: isMobile ? '16px 16px' : '32px 40px' }}>
       {adding      && <TaskModal onClose={() => setAdding(false)} onSave={handleSave} />}
       {addingSubTo && <TaskModal parentId={addingSubTo} onClose={() => setAddingSubTo(null)} onSave={handleSubtaskSave} />}
       {editing     && <TaskModal initial={editing} onClose={() => setEditing(null)} onSave={handleEdit} />}
       {deleting    && <ConfirmDelete label={deleting.title} onCancel={() => setDeleting(null)} onConfirm={handleDeleteConfirm} />}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, ...(isMobile && { paddingTop: 52 }) }}>
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Tasks</h1>
           <p style={{ color: 'rgba(255,255,255,0.45)', marginTop: 6, fontSize: 14 }}>
