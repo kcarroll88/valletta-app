@@ -1211,12 +1211,17 @@ async def sync_drive_files(authorization: Optional[str] = Header(None)):
 def list_events(
     event_type: Optional[str] = None,
     upcoming:   bool = False,
-    limit:      int = Query(50, le=200),
+    start:      Optional[str] = None,   # ISO date lower bound (inclusive), e.g. "2026-03-01"
+    end:        Optional[str] = None,   # ISO date upper bound (inclusive), e.g. "2026-04-30"
+    limit:      int = Query(200, le=500),
     offset:     int = 0,
 ):
     clauses, params = [], []
     if event_type: clauses.append("event_type = ?"); params.append(event_type)
     if upcoming:   clauses.append("start_dt >= ?"); params.append(now_ts()[:10])
+    # Date range filter: use the first 10 chars of start_dt for date-only and datetime comparison
+    if start:      clauses.append("substr(start_dt, 1, 10) >= ?"); params.append(start[:10])
+    if end:        clauses.append("substr(start_dt, 1, 10) <= ?"); params.append(end[:10])
     sql = "SELECT * FROM events"
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)

@@ -520,11 +520,20 @@ export default function Calendar() {
 
   const load = () => {
     setLoading(true)
-    const params = filter ? { event_type: filter } : {}
+    // Fetch ±1 month around the displayed month so multi-day events that span
+    // month boundaries are included. Using date range params avoids pulling all
+    // 1000+ events in a single request.
+    const prevMonth = new Date(calYear, calMonth - 1, 1)
+    const nextMonth = new Date(calYear, calMonth + 2, 0) // last day of calMonth+1
+    const pad = (n) => String(n).padStart(2, '0')
+    const startParam = `${prevMonth.getFullYear()}-${pad(prevMonth.getMonth() + 1)}-01`
+    const endParam   = `${nextMonth.getFullYear()}-${pad(nextMonth.getMonth() + 1)}-${pad(nextMonth.getDate())}`
+    const params = { start: startParam, end: endParam }
+    if (filter) params.event_type = filter
     api.events(params).then(setEvents).finally(() => setLoading(false))
   }
 
-  useEffect(load, [filter])
+  useEffect(load, [filter, calMonth, calYear])
 
   const handleSave = async (form) => {
     await api.createEvent(form)   // throws on error — modal catches it
