@@ -486,7 +486,7 @@ def get_felix_response(
     # Fetch shared band context
     try:
         band_ctx_rows = conn.execute(
-            "SELECT key, content FROM band_context ORDER BY updated_at DESC"
+            "SELECT key, content FROM band_context ORDER BY updated_at DESC LIMIT 20"
         ).fetchall()
     except Exception as exc:
         print(f"[Felix Bot] Warning: could not load band_context: {exc}")
