@@ -239,6 +239,7 @@ def _calendar_block(conn: sqlite3.Connection, days_ahead: int = 90, days_behind:
         return None
     lines = [f"[CALENDAR — {len(rows)} upcoming/recent events]"]
     for title, event_type, start_dt, end_dt, location, description in rows:
+        dt = None
         try:
             dt = datetime.fromisoformat(start_dt)
             day_name = dt.strftime("%A")
@@ -247,9 +248,9 @@ def _calendar_block(conn: sqlite3.Connection, days_ahead: int = 90, days_behind:
                 hour = dt.strftime("%I").lstrip("0") or "12"
                 date_str += f" at {hour}:{dt.strftime('%M')} {dt.strftime('%p')}"
         except Exception:
-            date_str = start_dt[:10]
+            date_str = start_dt[:10] if start_dt else ""
         end_str = ""
-        if end_dt:
+        if end_dt and dt is not None:
             try:
                 edt = datetime.fromisoformat(end_dt)
                 if edt.date() != dt.date():

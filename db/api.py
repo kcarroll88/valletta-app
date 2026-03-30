@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 import anthropic
+import httpx
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, File as FastAPIFile, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -362,7 +363,10 @@ CHAT_TOOLS = [
 
 _api_key     = os.getenv("ANTHROPIC_API_KEY", "")
 client       = anthropic.Anthropic(api_key=_api_key) if _api_key and _api_key != "your-api-key-here" else None
-async_client = anthropic.AsyncAnthropic(api_key=_api_key) if _api_key and _api_key != "your-api-key-here" else None
+# Explicit timeout: 10s connect, 120s per-read (prevents silent TCP-level hangs
+# where the API accepts the connection but stops sending SSE chunks mid-stream).
+_anthropic_timeout = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
+async_client = anthropic.AsyncAnthropic(api_key=_api_key, timeout=_anthropic_timeout) if _api_key and _api_key != "your-api-key-here" else None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -2924,81 +2928,91 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
         # ── Step 1: streaming call with tools ─────────────────────────────────
         full_text = ""
 
-        async with async_client.messages.stream(
-            model="claude-sonnet-4-6",
-            max_tokens=800,
-            system=system_prompt,
-            tools=CHAT_TOOLS,
-            messages=member_messages,
-        ) as stream:
-            async for event in stream:
-                if event.type == "content_block_delta":
-                    if hasattr(event.delta, "text"):
-                        chunk = event.delta.text
-                        full_text += chunk
-                        yield f"data: {json.dumps({'text': chunk})}\n\n"
-
-            final = await stream.get_final_message()
-
-        # ── Step 2: handle tool use ───────────────────────────────────────────
-        if final.stop_reason == "tool_use":
-            tool_results = []
-            for block in final.content:
-                if block.type == "tool_use":
-                    # Send a heartbeat so the frontend inactivity timer doesn't
-                    # fire during the DB call + follow-up API startup gap.
-                    yield f"data: {json.dumps({'ping': True, 'tool': block.name})}\n\n"
-                    # Run the synchronous DB call in a thread so it doesn't block
-                    # the event loop and deadlock the open streaming response.
-                    result = await asyncio.to_thread(_execute_tool, block.name, block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(result),
-                    })
-                    if block.name == "create_task" and result.get("success"):
-                        yield f"data: {json.dumps({'task_created': result['task']})}\n\n"
-                    if block.name == "create_idea" and result.get("ok"):
-                        idea_event = {**result, "title": block.input.get("title", "")}
-                        yield f"data: {json.dumps({'idea_created': idea_event})}\n\n"
-                    elif block.name == "save_article" and result.get("ok"):
-                        yield f"data: {json.dumps({'tool_result': {'name': 'save_article', 'result': result}})}\n\n"
-                    elif block.name in ("create_event", "create_roadmap_item", "create_contact") and result.get("ok"):
-                        yield f"data: {json.dumps({'tool_result': {'name': block.name, 'result': result}})}\n\n"
-                    elif block.name == "save_band_context" and result.get("ok"):
-                        yield f"data: {json.dumps({'tool_result': {'name': 'save_band_context', 'result': result}})}\n\n"
-
-            # Serialize assistant content blocks to clean dicts the API accepts.
-            # model_dump() includes extra SDK-internal fields (e.g. "caller", "citations")
-            # that the Anthropic API rejects, causing the follow-up call to fail.
-            def _serialize_content_block(b) -> dict:
-                if hasattr(b, "type"):
-                    if b.type == "tool_use":
-                        return {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
-                    if b.type == "text":
-                        return {"type": "text", "text": b.text}
-                # Fallback: pass through as-is (already a dict or unknown type)
-                return b if isinstance(b, dict) else vars(b)
-
-            # Follow-up streaming call with tool results
-            followup_messages = member_messages + [
-                {"role": "assistant", "content": [_serialize_content_block(b) for b in final.content]},
-                {"role": "user", "content": tool_results},
-            ]
+        try:
             async with async_client.messages.stream(
                 model="claude-sonnet-4-6",
-                max_tokens=1024,
+                max_tokens=800,
                 system=system_prompt,
                 tools=CHAT_TOOLS,
-                messages=followup_messages,
-            ) as followup_stream:
-                async for event in followup_stream:
-                    if event.type == "content_block_delta" and hasattr(event.delta, "text"):
-                        chunk = event.delta.text
-                        full_text += chunk
-                        yield f"data: {json.dumps({'text': chunk})}\n\n"
+                messages=member_messages,
+            ) as stream:
+                async for event in stream:
+                    if event.type == "content_block_delta":
+                        if hasattr(event.delta, "text"):
+                            chunk = event.delta.text
+                            full_text += chunk
+                            yield f"data: {json.dumps({'text': chunk})}\n\n"
 
-        # Sentinel: full text for context passing — not shown to the user
+                final = await stream.get_final_message()
+
+            # ── Step 2: handle tool use ───────────────────────────────────────────
+            if final.stop_reason == "tool_use":
+                tool_results = []
+                for block in final.content:
+                    if block.type == "tool_use":
+                        # Send a heartbeat so the frontend inactivity timer doesn't
+                        # fire during the DB call + follow-up API startup gap.
+                        yield f"data: {json.dumps({'ping': True, 'tool': block.name})}\n\n"
+                        # Run the synchronous DB call in a thread so it doesn't block
+                        # the event loop and deadlock the open streaming response.
+                        result = await asyncio.to_thread(_execute_tool, block.name, block.input)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(result),
+                        })
+                        if block.name == "create_task" and result.get("success"):
+                            yield f"data: {json.dumps({'task_created': result['task']})}\n\n"
+                        if block.name == "create_idea" and result.get("ok"):
+                            idea_event = {**result, "title": block.input.get("title", "")}
+                            yield f"data: {json.dumps({'idea_created': idea_event})}\n\n"
+                        elif block.name == "save_article" and result.get("ok"):
+                            yield f"data: {json.dumps({'tool_result': {'name': 'save_article', 'result': result}})}\n\n"
+                        elif block.name in ("create_event", "create_roadmap_item", "create_contact") and result.get("ok"):
+                            yield f"data: {json.dumps({'tool_result': {'name': block.name, 'result': result}})}\n\n"
+                        elif block.name == "save_band_context" and result.get("ok"):
+                            yield f"data: {json.dumps({'tool_result': {'name': 'save_band_context', 'result': result}})}\n\n"
+
+                # Serialize assistant content blocks to clean dicts the API accepts.
+                # model_dump() includes extra SDK-internal fields (e.g. "caller", "citations")
+                # that the Anthropic API rejects, causing the follow-up call to fail.
+                def _serialize_content_block(b) -> dict:
+                    if hasattr(b, "type"):
+                        if b.type == "tool_use":
+                            return {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                        if b.type == "text":
+                            return {"type": "text", "text": b.text}
+                    # Fallback: pass through as-is (already a dict or unknown type)
+                    return b if isinstance(b, dict) else vars(b)
+
+                # Follow-up streaming call with tool results
+                followup_messages = member_messages + [
+                    {"role": "assistant", "content": [_serialize_content_block(b) for b in final.content]},
+                    {"role": "user", "content": tool_results},
+                ]
+                async with async_client.messages.stream(
+                    model="claude-sonnet-4-6",
+                    max_tokens=1024,
+                    system=system_prompt,
+                    tools=CHAT_TOOLS,
+                    messages=followup_messages,
+                ) as followup_stream:
+                    async for event in followup_stream:
+                        if event.type == "content_block_delta" and hasattr(event.delta, "text"):
+                            chunk = event.delta.text
+                            full_text += chunk
+                            yield f"data: {json.dumps({'text': chunk})}\n\n"
+
+        except Exception as stream_exc:
+            # Surface streaming errors immediately so the frontend stops waiting.
+            # Without this, a TCP-level hang or API error causes a silent stall
+            # because the async generator exits without yielding [DONE].
+            error_msg = f"[{effective_member}] Stream error: {stream_exc}"
+            print(f"[API] _stream_member_response error: {stream_exc!r}")
+            yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
+
+        # Sentinel: full text for context passing — not shown to the user.
+        # Always yielded (even on error) so the outer loop can finalize correctly.
         yield f"data: {json.dumps({'_member_text': full_text})}\n\n"
         # NOTE: do NOT yield [DONE] here — only the outer stream_response does that
 
