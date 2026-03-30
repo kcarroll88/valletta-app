@@ -510,6 +510,8 @@ export default function Calendar() {
   const [calMonth,  setCalMonth]  = useState(new Date().getMonth())
   const [calYear,   setCalYear]   = useState(new Date().getFullYear())
   const [toast,     setToast]     = useState(null) // { message, type }
+  const [syncing,   setSyncing]   = useState(false)
+  const [syncMsg,   setSyncMsg]   = useState(null) // { text, ok }
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
@@ -570,6 +572,26 @@ export default function Calendar() {
     else setCalMonth(m => m + 1)
   }
 
+  const handleGoogleSync = async () => {
+    setSyncing(true)
+    setSyncMsg(null)
+    try {
+      const res = await fetch('/api/calendar/import', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('vlt_token')}` },
+      })
+      if (!res.ok) throw new Error('Server error')
+      const data = await res.json()
+      setSyncMsg({ text: `✓ ${data.imported} events imported, ${data.updated} updated`, ok: true })
+      setTimeout(() => { setSyncMsg(null); load() }, 4000)
+    } catch {
+      setSyncMsg({ text: 'Sync failed', ok: false })
+      setTimeout(() => setSyncMsg(null), 4000)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const handleEventClick = (e) => {
     setEditing(e)
   }
@@ -611,7 +633,17 @@ export default function Calendar() {
           <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Calendar</h1>
           <p style={{ color: 'rgba(255,255,255,0.45)', marginTop: 6, fontSize: 14, lineHeight: 1.5 }}>{events.length} events</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Sync status message */}
+          {syncMsg && (
+            <span style={{
+              fontSize: 12, fontWeight: 500,
+              color: syncMsg.ok ? '#4ade80' : '#f87171',
+              whiteSpace: 'nowrap',
+            }}>
+              {syncMsg.text}
+            </span>
+          )}
           {/* View toggle */}
           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 8, overflow: 'hidden' }}>
             {['calendar', 'list'].map(v => (
@@ -626,6 +658,26 @@ export default function Calendar() {
               </button>
             ))}
           </div>
+          {/* Sync from Google */}
+          <button
+            onClick={handleGoogleSync}
+            disabled={syncing}
+            style={{
+              background: 'rgba(66,133,244,0.12)',
+              border: '1px solid rgba(66,133,244,0.35)',
+              borderRadius: 8,
+              color: syncing ? 'rgba(66,133,244,0.50)' : '#4285F4',
+              padding: '7px 14px', fontSize: 12, fontWeight: 500,
+              cursor: syncing ? 'not-allowed' : 'pointer',
+              transition: 'background 0.12s, border-color 0.12s, color 0.12s',
+              whiteSpace: 'nowrap',
+              opacity: syncing ? 0.7 : 1,
+            }}
+            onMouseEnter={e => { if (!syncing) { e.currentTarget.style.background = 'rgba(66,133,244,0.20)'; e.currentTarget.style.borderColor = 'rgba(66,133,244,0.60)' } }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(66,133,244,0.12)'; e.currentTarget.style.borderColor = 'rgba(66,133,244,0.35)' }}
+          >
+            {syncing ? 'Syncing…' : '↓ Sync from Google'}
+          </button>
           <button
             onClick={() => setAdding(true)}
             style={saveBtnStyle}

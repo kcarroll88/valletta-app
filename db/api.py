@@ -1334,6 +1334,125 @@ def delete_event(event_id: int):
             print(f"[API] Google Calendar delete sync error (non-fatal): {gcal_exc}")
 
 
+@app.post("/api/calendar/import")
+def calendar_import(authorization: Optional[str] = Header(None)):
+    """
+    Import all events from Google Calendar into the local events table.
+
+    Uses timeMin = 1 year ago, no timeMax, so it pulls past-year and all future events.
+    Upserts by google_event_id — safe to run multiple times.
+
+    Returns: { "imported": N, "updated": N, "total": N }
+    """
+    _require_auth(authorization)
+
+    from datetime import timezone as _tz, timedelta as _td
+    from db.integrations.google_calendar import _load_creds, _refresh_and_save
+    from googleapiclient.discovery import build as _build
+
+    with get_db() as conn:
+        creds = _load_creds(conn)
+        if not creds:
+            raise HTTPException(400, "Google is not connected. Connect via Integrations settings.")
+        creds = _refresh_and_save(creds, conn)
+
+        service = _build("calendar", "v3", credentials=creds)
+
+        time_min = (datetime.now(tz=_tz.utc) - _td(days=365)).isoformat()
+
+        # Page through all events
+        all_events = []
+        page_token = None
+        while True:
+            kwargs = {
+                "calendarId": "primary",
+                "timeMin": time_min,
+                "singleEvents": True,
+                "orderBy": "startTime",
+                "maxResults": 250,
+            }
+            if page_token:
+                kwargs["pageToken"] = page_token
+            response = service.events().list(**kwargs).execute()
+            items = response.get("items", [])
+            all_events.extend(items)
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+
+        imported = 0
+        updated = 0
+        ts = now_ts()
+
+        for gcal_event in all_events:
+            gcal_id = gcal_event.get("id")
+            if not gcal_id:
+                continue
+
+            # Title
+            title = gcal_event.get("summary") or "Untitled Event"
+
+            # Start / End — handle dateTime (timed) and date (all-day)
+            start_obj = gcal_event.get("start", {})
+            end_obj   = gcal_event.get("end",   {})
+            start_dt  = start_obj.get("dateTime") or start_obj.get("date") or ""
+            end_dt    = end_obj.get("dateTime")   or end_obj.get("date")   or None
+
+            # Strip timezone offset for storage consistency (keep as ISO string)
+            # e.g. "2025-04-01T19:00:00-04:00" -> store as-is; date-only stays as-is
+            description = gcal_event.get("description") or None
+            location    = gcal_event.get("location")    or None
+
+            # Derive event_type heuristic from title keywords
+            title_lower = title.lower()
+            if any(w in title_lower for w in ("show", "gig", "concert", "performance", "festival")):
+                event_type = "show"
+            elif any(w in title_lower for w in ("rehearsal", "practice", "soundcheck")):
+                event_type = "rehearsal"
+            elif any(w in title_lower for w in ("studio", "recording", "tracking", "session")):
+                event_type = "recording"
+            elif any(w in title_lower for w in ("press", "interview", "media")):
+                event_type = "press"
+            elif any(w in title_lower for w in ("deadline",)):
+                event_type = "deadline"
+            elif any(w in title_lower for w in ("meeting", "call", "sync")):
+                event_type = "meeting"
+            else:
+                event_type = "other"
+
+            # Check if already in local DB by google_event_id
+            existing = conn.execute(
+                "SELECT id FROM events WHERE google_event_id = ?", (gcal_id,)
+            ).fetchone()
+
+            if existing:
+                conn.execute(
+                    """UPDATE events
+                          SET title=?, start_dt=?, end_dt=?, location=?, description=?,
+                              event_type=?, updated_at=?
+                        WHERE google_event_id=?""",
+                    (title, start_dt, end_dt, location, description,
+                     event_type, ts, gcal_id),
+                )
+                updated += 1
+            else:
+                conn.execute(
+                    """INSERT INTO events
+                           (title, event_type, start_dt, end_dt, location, description,
+                            recurring, created_at, updated_at, google_event_id)
+                       VALUES (?, ?, ?, ?, ?, ?, 'none', ?, ?, ?)""",
+                    (title, event_type, start_dt, end_dt, location, description,
+                     ts, ts, gcal_id),
+                )
+                imported += 1
+
+        conn.commit()
+
+    total = imported + updated
+    print(f"[API] calendar/import complete — imported={imported}, updated={updated}, total={total}")
+    return {"imported": imported, "updated": updated, "total": total}
+
+
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 @app.get("/api/tasks")
