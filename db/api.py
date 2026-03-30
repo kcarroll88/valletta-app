@@ -2896,28 +2896,41 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
 
     async def _stream_member_response(effective_member: str, scoped_question: str, messages: list, prior_context: str = ""):
         """Yields SSE chunks for a single member's response. Used by both single and multi-member flows.
-        Emits a final _member_text sentinel for context passing. Does NOT emit [DONE]."""
+        Emits a final _member_text sentinel for context passing. Does NOT emit [DONE].
+
+        Hang-safety design:
+        - Both API calls (initial + follow-up) are non-streaming messages.create() wrapped in
+          asyncio.wait_for(..., timeout=60). This eliminates all async-stream hang vectors:
+          there is no async-for loop over an open stream, no get_final_message() race, and no
+          silent TCP-keepalive resetting of the httpx read timer.
+        - The entire body is wrapped in try/except/finally. The finally block always yields the
+          _member_text sentinel so the outer stream_response can emit [DONE] and unblock the
+          frontend, even if an exception or timeout fires mid-response.
+        """
         print(f"[CHAT] {effective_member} starting stream")
         persona = TEAM_PERSONAS.get(effective_member) or TEAM_PERSONAS["felix"]
+        full_text = ""
 
-        with get_db() as conn:
-            integration_ctx = build_integration_context(effective_member, conn, scoped_question)
-            band_ctx_rows = conn.execute(
-                "SELECT key, content FROM band_context ORDER BY updated_at DESC LIMIT 20"
-            ).fetchall()
-        system_prompt = persona + ("\n\n" + integration_ctx if integration_ctx else "")
-        if band_ctx_rows:
-            band_ctx_block = "\n\n## Shared Band Context\nThe following facts about the band have been saved by you or other team members. Treat them as ground truth:\n"
-            for r in band_ctx_rows:
-                band_ctx_block += f"- [{r['key']}] {r['content']}\n"
-            system_prompt += band_ctx_block
-        if prior_context:
-            system_prompt += prior_context
+        try:
+            # ── Build context (pure SQLite — safe, no I/O hangs) ──────────────────
+            with get_db() as conn:
+                integration_ctx = build_integration_context(effective_member, conn, scoped_question)
+                band_ctx_rows = conn.execute(
+                    "SELECT key, content FROM band_context ORDER BY updated_at DESC LIMIT 20"
+                ).fetchall()
+            system_prompt = persona + ("\n\n" + integration_ctx if integration_ctx else "")
+            if band_ctx_rows:
+                band_ctx_block = "\n\n## Shared Band Context\nThe following facts about the band have been saved by you or other team members. Treat them as ground truth:\n"
+                for r in band_ctx_rows:
+                    band_ctx_block += f"- [{r['key']}] {r['content']}\n"
+                system_prompt += band_ctx_block
+            if prior_context:
+                system_prompt += prior_context
 
-        print(f"[CHAT] {effective_member} system_prompt chars: {len(system_prompt)}, integration_ctx chars: {len(integration_ctx)}")
+            print(f"[CHAT] {effective_member} system_prompt chars: {len(system_prompt)}, integration_ctx chars: {len(integration_ctx)}")
 
-        # ── Universal response style rules (appended to every member's prompt) ──
-        system_prompt += """
+            # ── Universal response style rules (appended to every member's prompt) ──
+            system_prompt += """
 
 ## Response Style Rules (mandatory)
 - Answer in 2–4 sentences for simple questions. Only go longer when the complexity genuinely requires it.
@@ -2926,32 +2939,43 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
 - If this question belongs to another team member, say so in ONE sentence only (e.g. "That's Marco's call — handing you over.") and stop. Do not attempt to answer the question yourself.
 - No padding, no restating what the user said, no transitional filler."""
 
-        member_messages = list(messages) + [{"role": "user", "content": scoped_question}]
+            member_messages = list(messages) + [{"role": "user", "content": scoped_question}]
 
-        # ── Step 1: streaming call with tools ─────────────────────────────────
-        full_text = ""
-
-        try:
-            async with async_client.messages.stream(
-                model="claude-sonnet-4-6",
-                max_tokens=800,
-                system=system_prompt,
-                tools=CHAT_TOOLS,
-                messages=member_messages,
-            ) as stream:
-                async for event in stream:
-                    if event.type == "content_block_delta":
-                        if hasattr(event.delta, "text"):
-                            chunk = event.delta.text
-                            full_text += chunk
-                            yield f"data: {json.dumps({'text': chunk})}\n\n"
-
-                final = await stream.get_final_message()
+            # ── Step 1: non-streaming initial call with tools, 60s hard timeout ──
+            # Using messages.create() (non-streaming) instead of messages.stream() eliminates
+            # all async-for / get_final_message() hang vectors. asyncio.wait_for enforces a
+            # hard deadline that the httpx Timeout cannot guarantee (TCP keepalives can reset
+            # the per-read timer indefinitely on an open but silent connection).
+            print(f"[CHAT] {effective_member} calling API (non-streaming, tools, timeout=60s)")
+            initial_resp = await asyncio.wait_for(
+                async_client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=800,
+                    system=system_prompt,
+                    tools=CHAT_TOOLS,
+                    messages=member_messages,
+                ),
+                timeout=60,
+            )
+            print(f"[CHAT] {effective_member} initial response received, stop_reason={initial_resp.stop_reason}")
 
             # ── Step 2: handle tool use ───────────────────────────────────────────
-            if final.stop_reason == "tool_use":
+            if initial_resp.stop_reason == "tool_use":
                 tool_results = []
-                for block in final.content:
+
+                # Serialize assistant content blocks to clean dicts the API accepts.
+                # model_dump() includes extra SDK-internal fields (e.g. "caller", "citations")
+                # that the Anthropic API rejects, causing the follow-up call to fail.
+                def _serialize_content_block(b) -> dict:
+                    if hasattr(b, "type"):
+                        if b.type == "tool_use":
+                            return {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                        if b.type == "text":
+                            return {"type": "text", "text": b.text}
+                    # Fallback: pass through as-is (already a dict or unknown type)
+                    return b if isinstance(b, dict) else vars(b)
+
+                for block in initial_resp.content:
                     if block.type == "tool_use":
                         # Send a heartbeat so the frontend inactivity timer doesn't
                         # fire during the DB call + follow-up API startup gap.
@@ -2976,33 +3000,21 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
                         elif block.name == "save_band_context" and result.get("ok"):
                             yield f"data: {json.dumps({'tool_result': {'name': 'save_band_context', 'result': result}})}\n\n"
 
-                # Serialize assistant content blocks to clean dicts the API accepts.
-                # model_dump() includes extra SDK-internal fields (e.g. "caller", "citations")
-                # that the Anthropic API rejects, causing the follow-up call to fail.
-                def _serialize_content_block(b) -> dict:
-                    if hasattr(b, "type"):
-                        if b.type == "tool_use":
-                            return {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
-                        if b.type == "text":
-                            return {"type": "text", "text": b.text}
-                    # Fallback: pass through as-is (already a dict or unknown type)
-                    return b if isinstance(b, dict) else vars(b)
-
-                # Follow-up call with tool results — non-streaming for reliability.
-                # Using messages.create() (non-streaming) avoids the fragility of a
-                # second async stream: cleaner timeout behaviour, no risk of a second
-                # tool_use loop hanging silently, and the follow-up text is short.
+                # Follow-up call with tool results — non-streaming, 60s hard timeout.
                 # tools are intentionally omitted so the model must return plain text.
                 print(f"[CHAT] {effective_member} starting non-streaming follow-up after tool use")
                 followup_messages = member_messages + [
-                    {"role": "assistant", "content": [_serialize_content_block(b) for b in final.content]},
+                    {"role": "assistant", "content": [_serialize_content_block(b) for b in initial_resp.content]},
                     {"role": "user", "content": tool_results},
                 ]
-                followup_resp = await async_client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=1024,
-                    system=system_prompt,
-                    messages=followup_messages,
+                followup_resp = await asyncio.wait_for(
+                    async_client.messages.create(
+                        model="claude-sonnet-4-6",
+                        max_tokens=1024,
+                        system=system_prompt,
+                        messages=followup_messages,
+                    ),
+                    timeout=60,
                 )
                 for block in followup_resp.content:
                     if hasattr(block, "text") and block.text:
@@ -3016,17 +3028,32 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
                             yield f"data: {json.dumps({'text': piece})}\n\n"
                 print(f"[CHAT] {effective_member} follow-up complete, full_text chars: {len(full_text)}")
 
+            else:
+                # No tool use — yield the initial response text in chunks
+                for block in initial_resp.content:
+                    if hasattr(block, "text") and block.text:
+                        full_text += block.text
+                        chunk_size = 200
+                        text_to_yield = block.text
+                        while text_to_yield:
+                            piece = text_to_yield[:chunk_size]
+                            text_to_yield = text_to_yield[chunk_size:]
+                            yield f"data: {json.dumps({'text': piece})}\n\n"
+
+        except asyncio.TimeoutError:
+            err = f"[{effective_member}] API call timed out after 60s"
+            print(f"[API] _stream_member_response timeout: {err}")
+            yield f"data: {json.dumps({'type': 'error', 'content': err})}\n\n"
         except Exception as stream_exc:
-            # Surface streaming errors immediately so the frontend stops waiting.
-            # Without this, a TCP-level hang or API error causes a silent stall
-            # because the async generator exits without yielding [DONE].
+            # Surface all other errors immediately so the frontend stops waiting.
             error_msg = f"[{effective_member}] Stream error: {stream_exc}"
             print(f"[API] _stream_member_response error: {stream_exc!r}")
             yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
-
-        # Sentinel: full text for context passing — not shown to the user.
-        # Always yielded (even on error) so the outer loop can finalize correctly.
-        yield f"data: {json.dumps({'_member_text': full_text})}\n\n"
+        finally:
+            # Sentinel: full text for context passing — not shown to the user.
+            # Always yielded (timeout, error, or success) so the outer loop can
+            # finalize correctly and emit [DONE] to unblock the frontend.
+            yield f"data: {json.dumps({'_member_text': full_text})}\n\n"
         # NOTE: do NOT yield [DONE] here — only the outer stream_response does that
 
     async def stream_response():
