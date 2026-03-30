@@ -2897,6 +2897,7 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
     async def _stream_member_response(effective_member: str, scoped_question: str, messages: list, prior_context: str = ""):
         """Yields SSE chunks for a single member's response. Used by both single and multi-member flows.
         Emits a final _member_text sentinel for context passing. Does NOT emit [DONE]."""
+        print(f"[CHAT] {effective_member} starting stream")
         persona = TEAM_PERSONAS.get(effective_member) or TEAM_PERSONAS["felix"]
 
         with get_db() as conn:
@@ -2912,6 +2913,8 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
             system_prompt += band_ctx_block
         if prior_context:
             system_prompt += prior_context
+
+        print(f"[CHAT] {effective_member} system_prompt chars: {len(system_prompt)}, integration_ctx chars: {len(integration_ctx)}")
 
         # ── Universal response style rules (appended to every member's prompt) ──
         system_prompt += """
@@ -2985,23 +2988,33 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
                     # Fallback: pass through as-is (already a dict or unknown type)
                     return b if isinstance(b, dict) else vars(b)
 
-                # Follow-up streaming call with tool results
+                # Follow-up call with tool results — non-streaming for reliability.
+                # Using messages.create() (non-streaming) avoids the fragility of a
+                # second async stream: cleaner timeout behaviour, no risk of a second
+                # tool_use loop hanging silently, and the follow-up text is short.
+                # tools are intentionally omitted so the model must return plain text.
+                print(f"[CHAT] {effective_member} starting non-streaming follow-up after tool use")
                 followup_messages = member_messages + [
                     {"role": "assistant", "content": [_serialize_content_block(b) for b in final.content]},
                     {"role": "user", "content": tool_results},
                 ]
-                async with async_client.messages.stream(
+                followup_resp = await async_client.messages.create(
                     model="claude-sonnet-4-6",
                     max_tokens=1024,
                     system=system_prompt,
-                    tools=CHAT_TOOLS,
                     messages=followup_messages,
-                ) as followup_stream:
-                    async for event in followup_stream:
-                        if event.type == "content_block_delta" and hasattr(event.delta, "text"):
-                            chunk = event.delta.text
-                            full_text += chunk
-                            yield f"data: {json.dumps({'text': chunk})}\n\n"
+                )
+                for block in followup_resp.content:
+                    if hasattr(block, "text") and block.text:
+                        full_text += block.text
+                        # Yield in ~200-char chunks so the frontend streams naturally
+                        chunk_size = 200
+                        text_to_yield = block.text
+                        while text_to_yield:
+                            piece = text_to_yield[:chunk_size]
+                            text_to_yield = text_to_yield[chunk_size:]
+                            yield f"data: {json.dumps({'text': piece})}\n\n"
+                print(f"[CHAT] {effective_member} follow-up complete, full_text chars: {len(full_text)}")
 
         except Exception as stream_exc:
             # Surface streaming errors immediately so the frontend stops waiting.
