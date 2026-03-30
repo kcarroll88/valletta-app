@@ -17,6 +17,7 @@ import Finance from './views/Finance'
 import Ideas from './views/Ideas'
 import Setlist from './views/Setlist'
 import Media from './views/Media'
+import Inventory from './views/Inventory'
 
 const VIEWS = {
   dashboard:    Dashboard,
@@ -31,6 +32,7 @@ const VIEWS = {
   contacts:     Contacts,
   insights:     Insights,
   integrations: Integrations,
+  inventory:    Inventory,
 }
 
 export default function App() {

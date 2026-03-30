@@ -19,6 +19,9 @@ async def sync_platform(platform: str, conn: sqlite3.Connection) -> dict:
         return await instagram.sync(conn)
     if platform == "tiktok":
         return await tiktok.sync(conn)
+    if platform == "square":
+        from db.integrations.platforms import square as sq
+        return await sq.sync(conn)
     return {"synced": 0, "errors": [f"Unknown platform: {platform}"]}
 
 

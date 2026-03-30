@@ -438,6 +438,60 @@ CREATE INDEX IF NOT EXISTS idx_media_articles_published ON media_articles(publis
 CREATE INDEX IF NOT EXISTS idx_media_articles_scraped ON media_articles(scraped_at DESC);
 
 -- ─────────────────────────────────────────
+-- SQUARE INTEGRATION
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS square_catalog_items (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    square_id       TEXT UNIQUE NOT NULL,       -- Square catalog object ID
+    name            TEXT NOT NULL,
+    description     TEXT,
+    sku             TEXT,
+    price_cents     INTEGER,                    -- price in cents
+    category        TEXT,
+    image_url       TEXT,
+    updated_at      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS square_inventory (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    catalog_item_id TEXT NOT NULL,              -- references square_catalog_items.square_id
+    location_id     TEXT,
+    location_name   TEXT,
+    quantity        REAL DEFAULT 0,
+    state           TEXT DEFAULT 'IN_STOCK',    -- IN_STOCK | SOLD | WASTE | etc
+    calculated_at   TEXT,
+    updated_at      TEXT,
+    UNIQUE(catalog_item_id, location_id)
+);
+
+CREATE TABLE IF NOT EXISTS square_orders (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    square_id       TEXT UNIQUE NOT NULL,
+    location_id     TEXT,
+    state           TEXT,                       -- OPEN | COMPLETED | CANCELED
+    total_cents     INTEGER,
+    item_count      INTEGER,
+    customer_name   TEXT,
+    fulfillment_type TEXT,                      -- PICKUP | SHIPMENT | DELIVERY
+    fulfillment_state TEXT,
+    created_at      TEXT,
+    updated_at      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS square_order_items (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id        TEXT NOT NULL,              -- references square_orders.square_id
+    catalog_item_id TEXT,
+    name            TEXT NOT NULL,
+    quantity        REAL,
+    base_price_cents INTEGER,
+    total_cents     INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_square_orders_created ON square_orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_square_inventory_item ON square_inventory(catalog_item_id);
+
+-- ─────────────────────────────────────────
 -- APP USERS & AUTH SESSIONS
 -- Per-user Google OAuth login for the app.
 -- ─────────────────────────────────────────

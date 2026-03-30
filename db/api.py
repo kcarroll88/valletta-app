@@ -2203,6 +2203,179 @@ def get_current_user(authorization: Optional[str] = Header(None)):
     return dict(row)
 
 
+# ── Inventory (Square) ────────────────────────────────────────────────────────
+
+
+def _table_exists(conn, table_name: str) -> bool:
+    return conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table_name,)
+    ).fetchone()[0] > 0
+
+
+@app.get("/api/inventory/items")
+def list_inventory_items(authorization: Optional[str] = Header(None)):
+    _require_auth(authorization)
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT ci.*,
+                   COALESCE(SUM(inv.quantity), 0) as total_quantity,
+                   GROUP_CONCAT(inv.location_name || ':' || inv.quantity, '|') as location_breakdown
+            FROM square_catalog_items ci
+            LEFT JOIN square_inventory inv ON inv.catalog_item_id = ci.square_id
+            GROUP BY ci.square_id
+            ORDER BY ci.name
+        """).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+@app.get("/api/inventory/orders")
+def list_inventory_orders(
+    limit: int = Query(50, le=200),
+    offset: int = 0,
+    state: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
+):
+    _require_auth(authorization)
+    clauses, params = [], []
+    if state:
+        clauses.append("state = ?"); params.append(state)
+    sql = "SELECT * FROM square_orders"
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    params += [limit, offset]
+    with get_db() as conn:
+        orders = conn.execute(sql, params).fetchall()
+        result = []
+        for o in orders:
+            d = row_to_dict(o)
+            items = conn.execute(
+                "SELECT * FROM square_order_items WHERE order_id = ?", (o["square_id"],)
+            ).fetchall()
+            d["items"] = [row_to_dict(i) for i in items]
+            result.append(d)
+    return result
+
+
+@app.get("/api/inventory/stats")
+def inventory_stats(authorization: Optional[str] = Header(None)):
+    _require_auth(authorization)
+    with get_db() as conn:
+        total_items = conn.execute("SELECT COUNT(*) FROM square_catalog_items").fetchone()[0]
+        low_stock = conn.execute("""
+            SELECT COUNT(DISTINCT ci.square_id) FROM square_catalog_items ci
+            JOIN square_inventory inv ON inv.catalog_item_id = ci.square_id
+            WHERE inv.quantity <= 3 AND inv.quantity > 0
+        """).fetchone()[0]
+        out_of_stock = conn.execute("""
+            SELECT COUNT(DISTINCT ci.square_id) FROM square_catalog_items ci
+            JOIN square_inventory inv ON inv.catalog_item_id = ci.square_id
+            WHERE inv.quantity = 0
+        """).fetchone()[0]
+        recent_orders = conn.execute(
+            "SELECT COUNT(*) FROM square_orders WHERE created_at > datetime('now', '-30 days')"
+        ).fetchone()[0]
+        revenue_30d = conn.execute(
+            "SELECT COALESCE(SUM(total_cents), 0) FROM square_orders WHERE created_at > datetime('now', '-30 days') AND state = 'COMPLETED'"
+        ).fetchone()[0]
+        square_connected = conn.execute(
+            "SELECT status FROM integration_connections WHERE platform = 'square'"
+        ).fetchone()
+        bandcamp_count = conn.execute("SELECT COUNT(*) FROM bandcamp_orders").fetchone()[0] if _table_exists(conn, 'bandcamp_orders') else 0
+    return {
+        "total_items": total_items,
+        "low_stock": low_stock,
+        "out_of_stock": out_of_stock,
+        "recent_orders_30d": recent_orders,
+        "revenue_30d_cents": revenue_30d,
+        "square_connected": square_connected["status"] == "connected" if square_connected else False,
+    }
+
+
+# ── Bandcamp CSV import ───────────────────────────────────────────────────────
+
+
+class BandcampCSVImport(BaseModel):
+    csv_content: str   # full CSV text sent from frontend
+
+
+@app.post("/api/inventory/bandcamp/import", status_code=201)
+def import_bandcamp_csv(body: BandcampCSVImport, authorization: Optional[str] = Header(None)):
+    _require_auth(authorization)
+    import csv, io
+    reader = csv.DictReader(io.StringIO(body.csv_content))
+
+    # Ensure table exists
+    with get_db() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS bandcamp_orders (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            bandcamp_id   TEXT UNIQUE,
+            date          TEXT,
+            item_name     TEXT,
+            item_type     TEXT,
+            quantity      INTEGER DEFAULT 1,
+            amount_paid   REAL,
+            currency      TEXT,
+            buyer_name    TEXT,
+            buyer_email   TEXT,
+            ship_to_name  TEXT,
+            ship_to_country TEXT,
+            shipped        INTEGER DEFAULT 0,
+            notes         TEXT,
+            imported_at   TEXT DEFAULT (datetime('now'))
+        )""")
+        conn.commit()
+
+    imported = 0
+    skipped = 0
+    with get_db() as conn:
+        for row in reader:
+            try:
+                # Bandcamp CSV columns vary by export type — handle common ones
+                bc_id = row.get('id') or row.get('order_id') or row.get('sale_id') or ''
+                conn.execute("""
+                    INSERT OR IGNORE INTO bandcamp_orders
+                    (bandcamp_id, date, item_name, item_type, quantity, amount_paid,
+                     currency, buyer_name, buyer_email, ship_to_name, ship_to_country, notes)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    bc_id,
+                    row.get('date') or row.get('sale date') or row.get('Date', ''),
+                    row.get('item name') or row.get('item') or row.get('Item Name', ''),
+                    row.get('item type') or row.get('type') or row.get('Item Type', ''),
+                    int(row.get('quantity', 1) or 1),
+                    float(row.get('amount paid (USD)') or row.get('amount paid') or row.get('Amount Paid', 0) or 0),
+                    row.get('currency') or row.get('Currency', 'USD'),
+                    row.get('buyer name') or row.get('Buyer Name', ''),
+                    row.get('buyer email') or row.get('Buyer Email', ''),
+                    row.get('ship to name') or row.get('Ship to Name', ''),
+                    row.get('ship to country') or row.get('Ship to Country', ''),
+                    row.get('notes') or row.get('Notes', ''),
+                ))
+                imported += 1
+            except Exception:
+                skipped += 1
+        conn.commit()
+    return {"imported": imported, "skipped": skipped}
+
+
+@app.get("/api/inventory/bandcamp/orders")
+def list_bandcamp_orders(
+    limit: int = Query(50, le=200),
+    offset: int = 0,
+    authorization: Optional[str] = Header(None),
+):
+    _require_auth(authorization)
+    with get_db() as conn:
+        if not _table_exists(conn, 'bandcamp_orders'):
+            return []
+        rows = conn.execute(
+            "SELECT * FROM bandcamp_orders ORDER BY date DESC LIMIT ? OFFSET ?",
+            (limit, offset)
+        ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
 # ── Media Articles ────────────────────────────────────────────────────────────
 
 def _scrape_article(url: str) -> dict:

@@ -3,6 +3,7 @@ router.py — FastAPI APIRouter for all /api/integrations/* endpoints.
 Included in api.py with prefix="/api/integrations".
 """
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from .platforms import discord as discord_platform
 from .platforms import google as google_platform
 from .platforms import instagram as instagram_platform
 from .platforms import tiktok as tiktok_platform
+from .platforms import square as square_platform
 from . import sync as sync_module
 from .token_store import create_state, consume_state
 
@@ -26,7 +28,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DB_PATH = PROJECT_ROOT / "db" / "valletta.db"
 FRONTEND_URL = "http://localhost:5173"
 
-ALL_PLATFORMS = ["google", "discord", "instagram", "tiktok"]
+ALL_PLATFORMS = ["google", "discord", "instagram", "tiktok", "square"]
+
+SQUARE_REDIRECT_URI = os.getenv("SQUARE_REDIRECT_URI", "http://localhost:8000/api/integrations/auth/callback/square")
 
 
 @contextmanager
@@ -210,6 +214,41 @@ async def auth_callback_tiktok(code: str = Query(...), state: str = Query(...)):
         return RedirectResponse(f"{FRONTEND_URL}/?connected=tiktok")
     except Exception as e:
         return RedirectResponse(f"{FRONTEND_URL}/?error=tiktok&reason={str(e)[:100]}")
+
+
+@router.get("/auth/start/square")
+def auth_start_square(authorization: Optional[str] = Header(None)):
+    _require_auth(authorization)
+    import os as _os
+    if not _os.getenv("SQUARE_APP_ID"):
+        raise HTTPException(400, "SQUARE_APP_ID not set in .env")
+    state = create_state("square")
+    url = square_platform.get_auth_url(state)
+    return {"url": url}
+
+
+@router.get("/auth/callback/square")
+def auth_callback_square(code: str = Query(...), state: str = Query(...)):
+    entry = consume_state(state)
+    if not entry or entry.get("platform") != "square":
+        return RedirectResponse(f"{FRONTEND_URL}/?error=square&reason=invalid_state")
+    try:
+        tokens = square_platform.exchange_code(code)
+        with get_db() as conn:
+            _ensure_platforms(conn)
+            conn.execute(
+                """UPDATE integration_connections SET
+                   status='connected', access_token=?, refresh_token=?, token_expires_at=?,
+                   account_label=?, token_scope=?, connected_at=?, updated_at=?
+                   WHERE platform='square'""",
+                (tokens["access_token"], tokens.get("refresh_token"),
+                 tokens.get("token_expires_at"), tokens["account_label"],
+                 tokens.get("token_scope"), _now(), _now()),
+            )
+            conn.commit()
+        return RedirectResponse(f"{FRONTEND_URL}/?connected=square")
+    except Exception as e:
+        return RedirectResponse(f"{FRONTEND_URL}/?error=square&reason={str(e)[:100]}")
 
 
 # ── Discord direct connect ───────────────────────────────────────────────────

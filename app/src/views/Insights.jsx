@@ -40,6 +40,11 @@ const PLATFORM_CONFIG = {
       { key: 'api_key',     label: 'API Key',               type: 'text' },
     ],
   },
+  square: {
+    label: 'Square',
+    accent: '#006AFF',
+    hint: 'Connect Square to sync inventory and orders',
+  },
 }
 
 const PLATFORMS = ['spotify', 'instagram', 'youtube']
@@ -188,15 +193,18 @@ function ConnectModal({ platform, onClose, onSuccess }) {
 
 // ─── Platform Card ────────────────────────────────────────────────────────────
 
-function PlatformCard({ platform, data, ytAccount, igAccount, onConnect, onDisconnect }) {
+function PlatformCard({ platform, data, ytAccount, igAccount, squareStats, onConnect, onDisconnect, onNavigate }) {
   const cfg    = PLATFORM_CONFIG[platform]
   // For YouTube, treat connected if ytAccount has subscriber data
   // For Instagram, treat connected if igAccount has followers data or data.connected
+  // For Square, treat connected if squareStats.square_connected is true
   const isConn = platform === 'youtube'
     ? (!!data?.connected || (ytAccount && ytAccount.subscribers != null))
     : platform === 'instagram'
       ? (!!data?.connected || (igAccount && igAccount.followers != null))
-      : !!data?.connected
+      : platform === 'square'
+        ? (squareStats?.square_connected === true)
+        : !!data?.connected
   const [disconnecting, setDisconnecting] = useState(false)
 
   const handleDisconnect = async () => {
@@ -316,6 +324,39 @@ function PlatformCard({ platform, data, ytAccount, igAccount, onConnect, onDisco
         </>
       )
     }
+    if (platform === 'square') {
+      const totalItems = squareStats?.total_items
+      const lastSyncAt = data?.synced_at || squareStats?.synced_at
+      return (
+        <>
+          <div style={{ fontSize: 36, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+            {totalItems != null ? fmt(totalItems) : '—'}
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', marginTop: 4, marginBottom: 12 }}>items in stock</div>
+          {lastSyncAt && (
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+              Last sync: {new Date(lastSyncAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </div>
+          )}
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('inventory')}
+              style={{
+                marginTop: 12, padding: '7px 16px', fontSize: 12, fontWeight: 600,
+                background: 'rgba(0,106,255,0.18)',
+                border: '1px solid rgba(0,106,255,0.40)',
+                borderRadius: 8, color: '#006AFF',
+                cursor: 'pointer', transition: 'all 150ms',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,106,255,0.30)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,106,255,0.18)' }}
+            >
+              Go to Inventory →
+            </button>
+          )}
+        </>
+      )
+    }
     return null
   }
 
@@ -340,7 +381,12 @@ function PlatformCard({ platform, data, ytAccount, igAccount, onConnect, onDisco
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 18, color: cfg.accent,
           }}>
-            {cfg.icon}
+            {platform === 'square' ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={cfg.accent}>
+                <rect x="2" y="2" width="20" height="20" rx="3"/>
+                <rect x="7" y="7" width="10" height="10" rx="1" fill="#0d0d14"/>
+              </svg>
+            ) : cfg.icon}
           </div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{cfg.label}</div>
@@ -374,6 +420,13 @@ function PlatformCard({ platform, data, ytAccount, igAccount, onConnect, onDisco
                     if (res?.url) window.location.href = res.url
                   } catch (err) {
                     console.error('Instagram OAuth start failed:', err)
+                  }
+                } else if (platform === 'square') {
+                  try {
+                    const res = await api.integrations.startAuth('square')
+                    if (res?.url) window.location.href = res.url
+                  } catch (err) {
+                    console.error('Square OAuth start failed:', err)
                   }
                 } else {
                   onConnect(platform)
@@ -695,6 +748,7 @@ export default function Insights({ onNavigate }) {
   const [ytVideos,     setYtVideos]     = useState(null)
   const [igAccount,    setIgAccount]    = useState(null)
   const [igPosts,      setIgPosts]      = useState(null)
+  const [squareStats,  setSquareStats]  = useState(null)
 
   const fetchInstagramData = () => {
     api.instagramMetrics('account')
@@ -757,6 +811,15 @@ export default function Insights({ onNavigate }) {
       .catch(() => setYtVideos([]))
   }
 
+  const fetchSquareStats = () => {
+    fetch('/api/inventory/stats', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('vlt_token') || ''}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setSquareStats(d))
+      .catch(() => setSquareStats(null))
+  }
+
   const fetchData = () => {
     setLoading(true)
     setError(null)
@@ -776,6 +839,7 @@ export default function Insights({ onNavigate }) {
     fetchData()
     fetchYoutubeData()
     fetchInstagramData()
+    fetchSquareStats()
   }, [])
 
   const handleSyncAll = () => {
@@ -819,6 +883,7 @@ export default function Insights({ onNavigate }) {
   const platformData = data?.platforms || {}
   const anyConnected = PLATFORMS.some(p => platformData[p]?.connected)
     || (igAccount && igAccount.followers != null)
+    || squareStats?.square_connected === true
 
   // Build snapshot rows from connected platforms
   const snapshots = []
@@ -909,24 +974,31 @@ export default function Insights({ onNavigate }) {
       {/* ── Main content ── */}
       {!loading && data && (
         <>
-          {/* Platform cards */}
-          {anyConnected ? (
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
-              {PLATFORMS.map(platform => (
-                <PlatformCard
-                  key={platform}
-                  platform={platform}
-                  data={platformData[platform] || null}
-                  ytAccount={platform === 'youtube' ? ytAccount : undefined}
-                  igAccount={platform === 'instagram' ? igAccount : undefined}
-                  onConnect={setModal}
-                  onDisconnect={handleDisconnect}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyState onConnect={setModal} />
-          )}
+          {/* Platform cards — always show all cards once data is loaded */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 16, marginBottom: 28 }}>
+            {PLATFORMS.map(platform => (
+              <PlatformCard
+                key={platform}
+                platform={platform}
+                data={platformData[platform] || null}
+                ytAccount={platform === 'youtube' ? ytAccount : undefined}
+                igAccount={platform === 'instagram' ? igAccount : undefined}
+                squareStats={undefined}
+                onConnect={setModal}
+                onDisconnect={handleDisconnect}
+                onNavigate={onNavigate}
+              />
+            ))}
+            <PlatformCard
+              key="square"
+              platform="square"
+              data={null}
+              squareStats={squareStats}
+              onConnect={setModal}
+              onDisconnect={handleDisconnect}
+              onNavigate={onNavigate}
+            />
+          </div>
 
           {/* Snapshot table */}
           {snapshots.length > 0 && <SnapshotTable snapshots={snapshots} />}
