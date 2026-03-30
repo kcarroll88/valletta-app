@@ -65,6 +65,7 @@ MEMBER_CONFIG = {
         "instagram": {"limit": 3},
         "tiktok":    {"limit": 3},
         "analytics": {"limit": 1},
+        "calendar":  {"limit": 30},
     },
     "nina": {
         "gmail":     {"limit": 10, "keywords": ["press", "feature", "interview", "review", "media", "journalist"]},
@@ -79,6 +80,7 @@ MEMBER_CONFIG = {
     "marco": {
         "discord":   {"limit": 20},
         "gmail":     {"limit": 10, "keywords": ["booking", "show", "venue", "festival", "gig", "tour", "support slot"]},
+        "calendar":  {"limit": 30},
     },
     "priya": {
         "instagram": {"limit": 5},
@@ -255,7 +257,7 @@ def _calendar_block(conn: sqlite3.Connection, days_ahead: int = 90, days_behind:
             except Exception:
                 pass
         loc_str = f" @ {location}" if location else ""
-        desc_str = f" — {description[:80]}" if description else ""
+        desc_str = f" — {description[:200]}" if description else ""
         lines.append(f"  [{event_type}] {title}: {date_str}{end_str}{loc_str}{desc_str}")
     return "\n".join(lines)
 
@@ -588,13 +590,16 @@ def build_integration_context(member: str, conn: sqlite3.Connection, message: st
             elif platform == "analytics":
                 result = _analytics_block(conn, opts)
                 block = result if result else None
+            elif platform == "calendar":
+                block = _calendar_block(conn, days_ahead=90, days_behind=14)
             if block:
                 blocks.append(block)
 
-    # ── Calendar ───────────────────────────────────────────────────────────
-    cal_block = _calendar_block(conn)
-    if cal_block:
-        blocks.append(cal_block)
+    # ── Calendar (fallback for members not in MEMBER_CONFIG) ───────────────
+    if not config or "calendar" not in config:
+        cal_block = _calendar_block(conn)
+        if cal_block:
+            blocks.append(cal_block)
 
     # ── Project files ──────────────────────────────────────────────────────
     files_block = _files_block(member, conn, message)

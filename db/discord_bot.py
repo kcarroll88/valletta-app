@@ -1038,7 +1038,9 @@ async def maybe_create_event(
 
 Today's date is {today_iso}. Tomorrow is {tomorrow_iso}.
 
-Message: {enriched}
+User message: {enriched}
+
+Felix's response: {felix_response}
 
 CRITICAL RULES:
 - Extract the event the user wants to create
@@ -1048,6 +1050,7 @@ CRITICAL RULES:
 - "tomorrow" = {tomorrow_iso}
 - "today" = {today_iso}
 - If no specific date is mentioned, use today's date {today_iso} as a placeholder
+- For description: write a concise summary of all known context — e.g. "Confirmed via Discord. Venue: X. Load-in: 5pm. Contact: Y. [any other relevant details from the conversation]". Include anything Felix mentioned in his response about the event.
 
 Return ONLY valid JSON (no code fences, no markdown):
 {{
@@ -1057,7 +1060,7 @@ Return ONLY valid JSON (no code fences, no markdown):
   "end_dt": "YYYY-MM-DD or empty string",
   "event_type": "show | rehearsal | studio | meeting | deadline | event",
   "location": "venue or location name, empty string if unknown",
-  "description": "any additional details"
+  "description": "Confirmed via Discord. [venue, load-in time, contact, pay, any other details from the conversation]"
 }}
 
 If truly no event info is extractable: {{"create_event": false}}"""
@@ -1082,7 +1085,9 @@ DO NOT create an event for:
 
 If in doubt, return {{"create_event": false}}. It is better to miss an event than to clutter the calendar.
 
-If yes, extract it. Return ONLY valid JSON:
+If yes, extract it. For description: write a concise summary of all known context — e.g. "Confirmed via Discord. Venue: X. Load-in: 5pm. Contact: Y. [any other relevant details]". Pull details from both the user message and Felix's response.
+
+Return ONLY valid JSON:
 {{
   "create_event": true,
   "title": "event title",
@@ -1090,7 +1095,7 @@ If yes, extract it. Return ONLY valid JSON:
   "end_dt": "YYYY-MM-DD or YYYY-MM-DDTHH:MM or empty string",
   "event_type": "show | rehearsal | studio | meeting | deadline | event",
   "location": "venue or location, empty string if unknown",
-  "description": "any relevant details"
+  "description": "Confirmed via Discord. [venue, load-in, contact, pay, any other details from the conversation]"
 }}
 
 If no: {{"create_event": false}}
@@ -1099,7 +1104,7 @@ Only return create_event: true if you are highly confident (>80%) this meets the
 
         resp = claude.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=300,
+            max_tokens=500,
             messages=[{"role": "user", "content": prompt}],
         )
         return resp.content[0].text.strip()
