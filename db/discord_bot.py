@@ -981,6 +981,38 @@ def sanitize_discord_response(text: str) -> str:
 # ── Event creation ────────────────────────────────────────────────────────────
 
 
+def _is_duplicate_event(conn, title: str, start_dt: str):
+    """Return an existing event row if a similar event already exists on the same date.
+
+    Similarity rules (any one is sufficient):
+    - Exact title match (case-insensitive)
+    - One title contains the other (case-insensitive)
+    - 60 %+ of words overlap between the two titles
+    Returns the sqlite3.Row of the duplicate, or None.
+    """
+    date = start_dt[:10]
+    existing = conn.execute(
+        "SELECT id, title, description, google_event_id FROM events WHERE substr(start_dt, 1, 10) = ?",
+        (date,),
+    ).fetchall()
+    if not existing:
+        return None
+    title_words = set(title.lower().split())
+    for row in existing:
+        existing_title = row[1] or ""
+        existing_words = set(existing_title.lower().split())
+        if not title_words or not existing_words:
+            continue
+        overlap = len(title_words & existing_words) / max(len(title_words), len(existing_words))
+        if (
+            overlap >= 0.6
+            or title.lower() in existing_title.lower()
+            or existing_title.lower() in title.lower()
+        ):
+            return row  # duplicate found
+    return None
+
+
 def explicit_event_command(text: str) -> bool:
     """Return True if the message contains an explicit calendar event creation trigger phrase."""
     patterns = [
@@ -1166,7 +1198,42 @@ Only return create_event: true if you are highly confident (>80%) this meets the
         now = datetime.now(timezone.utc).isoformat()
 
         conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
         try:
+            # ── Duplicate guard ──────────────────────────────────────────────
+            duplicate = _is_duplicate_event(conn, title, start_dt)
+            if duplicate:
+                dup_id = duplicate["id"]
+                dup_title = duplicate["title"]
+                print(
+                    f"[Felix Bot] Duplicate event detected: '{title}' matches existing "
+                    f"'{dup_title}' (id={dup_id}) on {start_dt[:10]} — skipping creation"
+                )
+                # If Felix has new context that isn't already in the description, append it
+                existing_desc = duplicate["description"] or ""
+                if description and description.strip() not in existing_desc:
+                    new_desc = existing_desc.rstrip() + "\n" + description.strip() if existing_desc else description.strip()
+                    conn.execute(
+                        "UPDATE events SET description = ?, updated_at = ? WHERE id = ?",
+                        (new_desc, now, dup_id),
+                    )
+                    conn.commit()
+                    print(f"[Felix Bot] Appended new context to existing event id={dup_id}")
+                    # Sync updated description to Google Calendar if linked
+                    dup_gcal_id = duplicate["google_event_id"]
+                    if dup_gcal_id:
+                        try:
+                            from db.integrations.google_calendar import update_google_calendar_event
+                            update_google_calendar_event(
+                                dup_gcal_id,
+                                {"title": dup_title, "start_dt": start_dt, "description": new_desc},
+                            )
+                            print(f"[Felix Bot] Updated GCal event {dup_gcal_id} with new description")
+                        except Exception as gcal_exc:
+                            print(f"[Felix Bot] GCal description update error (non-fatal): {gcal_exc}")
+                return {"id": dup_id, "title": dup_title, "start_dt": start_dt, "event_type": event_type, "duplicate": True}
+
+            # ── No duplicate — create new ────────────────────────────────────
             cur = conn.execute(
                 """INSERT INTO events (title, event_type, start_dt, end_dt, location, description, recurring, created_at, updated_at)
                    VALUES (?, ?, ?, ?, ?, ?, 'none', ?, ?)""",

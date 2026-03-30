@@ -1241,10 +1241,56 @@ def get_event(event_id: int):
     return row_to_dict(row)
 
 
+def _is_duplicate_event_api(conn, title: str, start_dt: str):
+    """Return an existing event row if a similar event already exists on the same date.
+
+    Used by the REST API create endpoint to prevent duplicate events.
+    Similarity rules (any one sufficient):
+      - Exact title match (case-insensitive)
+      - One title contains the other (case-insensitive)
+      - 60%+ word overlap between titles
+    Returns the sqlite3.Row of the match, or None.
+    """
+    date = start_dt[:10]
+    existing = conn.execute(
+        "SELECT * FROM events WHERE substr(start_dt, 1, 10) = ?",
+        (date,),
+    ).fetchall()
+    if not existing:
+        return None
+    title_words = set(title.lower().split())
+    for row in existing:
+        existing_title = (row["title"] or "") if hasattr(row, "keys") else (row[1] or "")
+        existing_words = set(existing_title.lower().split())
+        if not title_words or not existing_words:
+            continue
+        overlap = len(title_words & existing_words) / max(len(title_words), len(existing_words))
+        if (
+            overlap >= 0.6
+            or title.lower() in existing_title.lower()
+            or existing_title.lower() in title.lower()
+        ):
+            return row
+    return None
+
+
 @app.post("/api/events", status_code=201)
 def create_event(body: EventCreate):
     ts = now_ts()
     with get_db() as conn:
+        # ── Duplicate guard ──────────────────────────────────────────────────
+        if body.start_dt:
+            duplicate = _is_duplicate_event_api(conn, body.title or "", body.start_dt)
+            if duplicate:
+                dup = row_to_dict(duplicate)
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "message": "A similar event already exists on this date.",
+                        "existing": dup,
+                    },
+                )
+        # ── No duplicate — insert ────────────────────────────────────────────
         cur = conn.execute(
             "INSERT INTO events (title, event_type, start_dt, end_dt, location, description, recurring, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
             (body.title, body.event_type, body.start_dt, body.end_dt, body.location, body.description, body.recurring or "none", ts, ts),
