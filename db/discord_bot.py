@@ -482,6 +482,15 @@ def get_felix_response(
     except Exception as exc:
         print(f"[Felix Bot] Warning: could not build integration context: {exc}")
         integration_ctx = ""
+
+    # Fetch shared band context
+    try:
+        band_ctx_rows = conn.execute(
+            "SELECT key, content FROM band_context ORDER BY updated_at DESC"
+        ).fetchall()
+    except Exception as exc:
+        print(f"[Felix Bot] Warning: could not load band_context: {exc}")
+        band_ctx_rows = []
     finally:
         conn.close()
 
@@ -512,6 +521,10 @@ def get_felix_response(
     system_prompt = FELIX_PERSONA + DISCORD_CONTEXT_ADDENDUM + contact_logging_note + team_context + file_system_note
     if integration_ctx:
         system_prompt += f"\n\nContext:\n{integration_ctx}"
+    if band_ctx_rows:
+        system_prompt += "\n\n## Shared Band Context\nThe following facts have been saved by you or team members across all interfaces. Treat them as ground truth:\n"
+        for r in band_ctx_rows:
+            system_prompt += f"- [{r['key']}] {r['content']}\n"
     # Final hard reminder appended last — ensures it is the most recent instruction the model sees
     system_prompt += "\n\nFINAL REMINDER: Respond in plain English only. Absolutely no JSON, no {curly braces as data}, no \"start\"/\"end\"/\"allDay\" fields, no structured output. Natural language only."
 
@@ -1247,6 +1260,99 @@ Return ONLY: {{"pin": true, "reason": "brief reason"}} or {{"pin": false}}"""}]
         return False
 
 
+# ── Band context extraction ───────────────────────────────────────────────────
+
+
+async def maybe_save_band_context(
+    message_content: str,
+    felix_response: str,
+    author_name: str,
+) -> list[dict]:
+    """Detect important band facts shared in a Discord message and save them to band_context.
+
+    Returns a list of saved context dicts: {key, content}.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key or api_key == "your-api-key-here":
+        return []
+
+    loop = asyncio.get_event_loop()
+
+    def _detect_and_save() -> list[dict]:
+        claude = anthropic.Anthropic(api_key=api_key)
+        resp = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
+            system=(
+                "You extract important, persistent band facts from a Discord conversation with Felix, "
+                "the band manager.\n\n"
+                "ONLY extract facts that meet ALL of these criteria:\n"
+                "1. It is a concrete, factual statement about the band (not a question or vague idea)\n"
+                "2. It is something other team members would benefit from knowing\n"
+                "3. It falls into one of these categories: tour/shows (dates, cities, count), "
+                "release plans (album/single/EP with dates), key band decisions, "
+                "important upcoming deadlines, partnerships or deals confirmed\n\n"
+                "DO NOT extract:\n"
+                "- General conversation or opinions\n"
+                "- Anything already vague ('we might do a tour someday')\n"
+                "- Tasks, ideas, or questions\n\n"
+                "If nothing qualifies, return: {\"facts\": []}\n\n"
+                "If facts are found, return JSON:\n"
+                "{\"facts\": [{\"key\": \"short-slug\", \"content\": \"1-3 sentence summary\"}]}\n\n"
+                "Key must be a lowercase slug with hyphens (e.g. 'tour-april-2026', 'debut-album-release').\n"
+                "Only return valid JSON, no markdown."
+            ),
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Discord message from {author_name}: {message_content}\n\nFelix's response: {felix_response}"
+                }
+            ],
+        )
+        raw = resp.content[0].text.strip()
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            return []
+        try:
+            data = json.loads(match.group())
+        except json.JSONDecodeError:
+            return []
+
+        facts = data.get("facts") or []
+        if not facts:
+            return []
+
+        import datetime
+        now = datetime.datetime.utcnow().isoformat()
+        saved = []
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        try:
+            for fact in facts:
+                key = (fact.get("key") or "").strip().lower().replace(" ", "-")
+                content = (fact.get("content") or "").strip()
+                if not key or not content:
+                    continue
+                conn.execute(
+                    """INSERT INTO band_context (key, content, source, created_by, created_at, updated_at)
+                       VALUES (?, ?, 'felix', ?, ?, ?)
+                       ON CONFLICT(key) DO UPDATE SET content=excluded.content, source=excluded.source,
+                       created_by=excluded.created_by, updated_at=excluded.updated_at""",
+                    (key, content, author_name, now, now),
+                )
+                saved.append({"key": key, "content": content})
+            conn.commit()
+        finally:
+            conn.close()
+        return saved
+
+    try:
+        return await loop.run_in_executor(None, _detect_and_save)
+    except Exception as exc:
+        print(f"[Felix Bot] maybe_save_band_context error: {exc}")
+        return []
+
+
 # ── Press article save ────────────────────────────────────────────────────────
 
 
@@ -1557,7 +1663,20 @@ async def on_message(message: discord.Message):
                 except Exception as e:
                     print(f"[Felix Bot] Step 9 (article) error: {e}")
 
-            await asyncio.gather(_run_idea(), _run_pin(), _run_contact(), _run_event(), _run_article())
+            async def _run_band_context():
+                # Step 10: Band context extraction — save important facts to shared store
+                try:
+                    saved_facts = await maybe_save_band_context(
+                        message.content,
+                        response_text,
+                        author_name,
+                    )
+                    for fact in saved_facts:
+                        print(f"[Felix Bot] Step 10 (context) saved: [{fact['key']}] {fact['content'][:60]}")
+                except Exception as e:
+                    print(f"[Felix Bot] Step 10 (band_context) error: {e}")
+
+            await asyncio.gather(_run_idea(), _run_pin(), _run_contact(), _run_event(), _run_article(), _run_band_context())
 
     except Exception as exc:
         import traceback

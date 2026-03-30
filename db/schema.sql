@@ -492,6 +492,25 @@ CREATE INDEX IF NOT EXISTS idx_square_orders_created ON square_orders(created_at
 CREATE INDEX IF NOT EXISTS idx_square_inventory_item ON square_inventory(catalog_item_id);
 
 -- ─────────────────────────────────────────
+-- BAND CONTEXT
+-- Shared knowledge base for all AI team members.
+-- Key facts, plans, tour dates, decisions — anything that should be
+-- accessible across Discord (Felix) and the Valletta app team chat.
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS band_context (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    key         TEXT UNIQUE NOT NULL,   -- short slug, e.g. "tour-april-2026"
+    content     TEXT NOT NULL,          -- 1-3 sentence summary of the fact/plan
+    source      TEXT DEFAULT 'manual',  -- 'felix' | 'team-chat' | 'manual'
+    created_by  TEXT,                   -- name/handle of who shared the info
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_band_context_key ON band_context(key);
+CREATE INDEX IF NOT EXISTS idx_band_context_updated ON band_context(updated_at DESC);
+
+-- ─────────────────────────────────────────
 -- APP USERS & AUTH SESSIONS
 -- Per-user Google OAuth login for the app.
 -- ─────────────────────────────────────────

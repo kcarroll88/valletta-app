@@ -321,6 +321,24 @@ CHAT_TOOLS = [
         }
     },
     {
+        "name": "save_band_context",
+        "description": (
+            "Save an important band fact, plan, or decision to the shared band context store. "
+            "Use this proactively whenever the user shares key information: upcoming tours, release dates, "
+            "show counts, band decisions, important events, or any fact that other team members should know. "
+            "Key must be a short slug (e.g. 'tour-april-2026', 'album-release-q3'). "
+            "Content should be 1-3 sentences capturing the essential details."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key":     {"type": "string", "description": "Short slug identifier, e.g. 'tour-april-2026'"},
+                "content": {"type": "string", "description": "1-3 sentence summary of the fact or plan"},
+            },
+            "required": ["key", "content"]
+        }
+    },
+    {
         "name": "create_contact",
         "description": "Create a new contact — either a person or a business/company",
         "input_schema": {
@@ -581,6 +599,23 @@ def _execute_tool(tool_name: str, tool_input: dict) -> dict:
                 )
             conn.commit()
         return {"ok": True, "id": cur.lastrowid, "contact_type": contact_type}
+    if tool_name == "save_band_context":
+        key = (tool_input.get("key") or "").strip().lower().replace(" ", "-")
+        content = (tool_input.get("content") or "").strip()
+        if not key or not content:
+            return {"ok": False, "error": "key and content are required"}
+        now = now_ts()
+        with get_db() as conn:
+            conn.execute(
+                """INSERT INTO band_context (key, content, source, created_by, created_at, updated_at)
+                   VALUES (?, ?, 'team-chat', 'team-chat', ?, ?)
+                   ON CONFLICT(key) DO UPDATE SET content=excluded.content, source=excluded.source,
+                   created_by=excluded.created_by, updated_at=excluded.updated_at""",
+                (key, content, now, now),
+            )
+            conn.commit()
+            row = conn.execute("SELECT * FROM band_context WHERE key=?", (key,)).fetchone()
+        return {"ok": True, "key": key, "id": row["id"]}
     return {"error": f"Unknown tool: {tool_name}"}
 
 
@@ -2692,7 +2727,15 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
 
         with get_db() as conn:
             integration_ctx = build_integration_context(effective_member, conn, scoped_question)
+            band_ctx_rows = conn.execute(
+                "SELECT key, content FROM band_context ORDER BY updated_at DESC"
+            ).fetchall()
         system_prompt = persona + ("\n\n" + integration_ctx if integration_ctx else "")
+        if band_ctx_rows:
+            band_ctx_block = "\n\n## Shared Band Context\nThe following facts about the band have been saved by you or other team members. Treat them as ground truth:\n"
+            for r in band_ctx_rows:
+                band_ctx_block += f"- [{r['key']}] {r['content']}\n"
+            system_prompt += band_ctx_block
         if prior_context:
             system_prompt += prior_context
 
@@ -2752,6 +2795,8 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
                         yield f"data: {json.dumps({'tool_result': {'name': 'save_article', 'result': result}})}\n\n"
                     elif block.name in ("create_event", "create_roadmap_item", "create_contact") and result.get("ok"):
                         yield f"data: {json.dumps({'tool_result': {'name': block.name, 'result': result}})}\n\n"
+                    elif block.name == "save_band_context" and result.get("ok"):
+                        yield f"data: {json.dumps({'tool_result': {'name': 'save_band_context', 'result': result}})}\n\n"
 
             # Serialize assistant content blocks to clean dicts the API accepts.
             # model_dump() includes extra SDK-internal fields (e.g. "caller", "citations")
@@ -3244,6 +3289,57 @@ async def disconnect_analytics(
     conn.execute("DELETE FROM analytics_connections WHERE platform=?", (platform,))
     conn.commit()
     return {"ok": True}
+
+
+# ── Band Context ──────────────────────────────────────────────────────────────
+
+class BandContextUpsert(BaseModel):
+    key: str
+    content: str
+    source: Optional[str] = "manual"
+    created_by: Optional[str] = None
+
+
+@app.get("/api/context")
+async def list_band_context(authorization: Optional[str] = Header(None)):
+    _require_auth(authorization)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM band_context ORDER BY updated_at DESC"
+        ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+@app.post("/api/context", status_code=201)
+async def upsert_band_context(
+    body: BandContextUpsert, authorization: Optional[str] = Header(None)
+):
+    _require_auth(authorization)
+    key = body.key.strip().lower().replace(" ", "-")
+    if not key or not body.content.strip():
+        raise HTTPException(400, "key and content are required")
+    now = now_ts()
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO band_context (key, content, source, created_by, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET content=excluded.content, source=excluded.source,
+               created_by=excluded.created_by, updated_at=excluded.updated_at""",
+            (key, body.content.strip(), body.source or "manual", body.created_by, now, now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM band_context WHERE key=?", (key,)).fetchone()
+    return row_to_dict(row)
+
+
+@app.delete("/api/context/{context_id}", status_code=204)
+async def delete_band_context(
+    context_id: int, authorization: Optional[str] = Header(None)
+):
+    _require_auth(authorization)
+    with get_db() as conn:
+        conn.execute("DELETE FROM band_context WHERE id=?", (context_id,))
+        conn.commit()
 
 
 # ── Dev entry point ───────────────────────────────────────────────────────────
