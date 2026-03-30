@@ -440,6 +440,19 @@ def _init_auth_tables():
               expires_at TEXT NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS band_context (
+              id          INTEGER PRIMARY KEY AUTOINCREMENT,
+              key         TEXT UNIQUE NOT NULL,
+              content     TEXT NOT NULL,
+              source      TEXT DEFAULT 'manual',
+              created_by  TEXT,
+              created_at  TEXT DEFAULT (datetime('now')),
+              updated_at  TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_band_context_key ON band_context(key)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_band_context_updated ON band_context(updated_at DESC)')
         conn.commit()
 
 
