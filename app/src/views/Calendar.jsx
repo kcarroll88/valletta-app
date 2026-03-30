@@ -23,12 +23,25 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 // Parse a date string in LOCAL time to avoid the UTC-offset day-shift bug.
 // new Date("YYYY-MM-DD") treats the string as UTC midnight, which rolls the
 // displayed day backward by the UTC offset on machines west of UTC (e.g., EDT
-// shifts "2026-04-01" to Mar 31 at 8pm local). Strings that contain a 'T'
-// (datetime) are left for the browser to parse normally.
+// shifts "2026-04-01" to Mar 31 at 8pm local).
+//
+// For datetime strings that include a timezone offset (e.g. "2026-04-17T12:00:00-04:00"),
+// we extract the date portion directly by splitting on 'T' so that the calendar
+// always places the event on the date it was scheduled in the originating timezone,
+// regardless of the viewer's local timezone. This avoids cross-midnight drift when
+// an event stored as e.g. "2026-04-17T23:30:00-04:00" would be 03:30 UTC on Apr 18.
 function parseLocalDate(s) {
   if (!s) return null
+  // Date-only: "YYYY-MM-DD"
   if (s.length === 10 && !s.includes('T')) {
     const [y, mo, d] = s.split('-').map(Number)
+    return new Date(y, mo - 1, d)
+  }
+  // Datetime with timezone offset (e.g. "2026-04-17T12:00:00-04:00"):
+  // extract the date portion directly — don't let JS convert to local time first.
+  if (s.includes('T')) {
+    const datePart = s.slice(0, 10)
+    const [y, mo, d] = datePart.split('-').map(Number)
     return new Date(y, mo - 1, d)
   }
   return new Date(s)
@@ -63,7 +76,11 @@ function GoogleEventPopover({ event, onClose }) {
           </span>
           {event.start_dt && fmtDateTime(event.start_dt)}
           {event.end_dt && (() => {
-            const s = parseLocalDate(event.start_dt), en = parseLocalDate(event.end_dt)
+            const s = parseLocalDate(event.start_dt)
+            // For all-day events, GCal end_dt is exclusive (day after) — subtract one day before displaying.
+            const isAllDayEnd = event.end_dt.length === 10 && !event.end_dt.includes('T')
+            const rawEnd = parseLocalDate(event.end_dt)
+            const en = isAllDayEnd ? new Date(rawEnd.getFullYear(), rawEnd.getMonth(), rawEnd.getDate() - 1) : rawEnd
             if (s.toDateString() !== en.toDateString()) {
               const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
               return ` – ${fmt(en)}`
@@ -93,7 +110,10 @@ function fmtDateTime(iso) {
       d = new Date(y, mo - 1, day)
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     }
-    d = new Date(iso.replace('T', ' ').slice(0, 16))
+    // Pass the full ISO string (with offset if present) to Date so the browser
+    // converts it to local time correctly. Previously this stripped the offset
+    // via .slice(0,16), which was fragile for strings like "2026-04-17T12:00:00-04:00".
+    d = new Date(iso)
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
       ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   } catch {
@@ -391,7 +411,22 @@ function CalendarGrid({ events, month, year, onDayClick, onEventClick }) {
   events.forEach(e => {
     if (!e.start_dt) return
     const startDt  = parseLocalDate(e.start_dt)
-    const endDt    = e.end_dt ? parseLocalDate(e.end_dt) : startDt
+    // Google Calendar all-day events store end_dt as the EXCLUSIVE day after
+    // (e.g. an event on Apr 17 has end='2026-04-18'). We subtract one day for
+    // date-only end_dt strings so the event doesn't bleed into the next day.
+    let endDt
+    if (e.end_dt) {
+      const rawEnd = parseLocalDate(e.end_dt)
+      const isAllDayEnd = e.end_dt.length === 10 && !e.end_dt.includes('T')
+      if (isAllDayEnd) {
+        endDt = new Date(rawEnd)
+        endDt.setDate(endDt.getDate() - 1)
+      } else {
+        endDt = rawEnd
+      }
+    } else {
+      endDt = startDt
+    }
     // Determine range of days in this month that the event covers
     const monthStart = new Date(year, month, 1)
     const monthEnd   = new Date(year, month + 1, 0)
@@ -458,9 +493,13 @@ function CalendarGrid({ events, month, year, onDayClick, onEventClick }) {
                       let multiSuffix = ''
                       if (e.end_dt) {
                         const startDay = parseLocalDate(e.start_dt).toDateString()
-                        const endDay   = parseLocalDate(e.end_dt).toDateString()
-                        if (startDay !== endDay) {
-                          const endDtObj = parseLocalDate(e.end_dt)
+                        // For all-day events, GCal end_dt is exclusive — subtract one day before comparing/displaying.
+                        const isAllDayEnd = e.end_dt.length === 10 && !e.end_dt.includes('T')
+                        const rawEndObj = parseLocalDate(e.end_dt)
+                        const endDtObj = isAllDayEnd
+                          ? new Date(rawEndObj.getFullYear(), rawEndObj.getMonth(), rawEndObj.getDate() - 1)
+                          : rawEndObj
+                        if (startDay !== endDtObj.toDateString()) {
                           multiSuffix = ` → ${endDtObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
                         }
                       }
@@ -805,10 +844,13 @@ export default function Calendar() {
                 {(() => {
                   if (e.end_dt) {
                     const startDt = parseLocalDate(e.start_dt)
-                    const endDt   = parseLocalDate(e.end_dt)
-                    const sDay = startDt.toDateString()
-                    const eDay = endDt.toDateString()
-                    if (sDay !== eDay) {
+                    // For all-day events, GCal end_dt is exclusive — subtract one day before displaying.
+                    const isAllDayEnd = e.end_dt.length === 10 && !e.end_dt.includes('T')
+                    const rawEnd = parseLocalDate(e.end_dt)
+                    const endDt = isAllDayEnd
+                      ? new Date(rawEnd.getFullYear(), rawEnd.getMonth(), rawEnd.getDate() - 1)
+                      : rawEnd
+                    if (startDt.toDateString() !== endDt.toDateString()) {
                       const fmtDate = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                       return `${fmtDate(startDt)} – ${fmtDate(endDt)}`
                     }
