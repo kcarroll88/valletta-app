@@ -141,28 +141,78 @@ function SquareNotConnected({ onConnect }) {
   )
 }
 
+// ─── Stock Tab Helpers ────────────────────────────────────────────────────────
+
+function groupItems(items) {
+  const groups = {}
+  for (const item of items) {
+    const sep = item.name ? item.name.indexOf(' \u2014 ') : -1
+    const groupName = sep > -1 ? item.name.slice(0, sep) : (item.name || 'Unnamed')
+    const variant   = sep > -1 ? item.name.slice(sep + 3) : null
+    if (!groups[groupName]) {
+      groups[groupName] = { name: groupName, price_cents: item.price_cents, variants: [] }
+    }
+    groups[groupName].variants.push({ ...item, variant })
+  }
+  return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function qtyBadgeStyle(qty) {
+  if (qty >= 10) return { bg: 'rgba(34,197,94,0.15)',   color: '#4ade80' }
+  if (qty >= 3)  return { bg: 'rgba(245,158,11,0.15)',  color: '#fbbf24' }
+  if (qty >= 1)  return { bg: 'rgba(239,68,68,0.15)',   color: '#f87171' }
+  return             { bg: 'rgba(107,114,128,0.15)', color: '#6b7280' }
+}
+
+function QtyBadge({ qty, small }) {
+  const { bg, color } = qtyBadgeStyle(qty)
+  return (
+    <div style={{
+      padding: small ? '3px 9px' : '4px 12px',
+      borderRadius: 20,
+      background: bg,
+      border: `1px solid ${color}44`,
+      color,
+      fontSize: small ? 11 : 13,
+      fontWeight: 700,
+      textAlign: 'center',
+      flexShrink: 0,
+      letterSpacing: qty === 0 ? '0.05em' : 0,
+      textDecoration: qty === 0 ? 'line-through' : 'none',
+    }}>
+      {qty === 0 ? 'OUT' : qty}
+    </div>
+  )
+}
+
 // ─── Stock Tab ────────────────────────────────────────────────────────────────
 
 function StockTab({ items, squareConnected, onConnect }) {
-  const [search, setSearch]     = useState('')
-  const [expanded, setExpanded] = useState(null)
+  const [search, setSearch]         = useState('')
+  const [expandedGroup, setExpanded] = useState(null)
 
   if (!squareConnected) {
     return <SquareNotConnected onConnect={onConnect} />
   }
 
-  const filtered = (items || []).filter(item =>
-    item.name?.toLowerCase().includes(search.toLowerCase()) ||
-    item.sku?.toLowerCase().includes(search.toLowerCase())
+  const allGroups = groupItems(items || [])
+
+  const filteredGroups = allGroups.filter(g =>
+    g.name.toLowerCase().includes(search.toLowerCase())
   )
+
+  // Stat counts
+  const totalProducts  = allGroups.length
+  const totalVariants  = allGroups.reduce((n, g) => n + (g.variants.length > 1 ? g.variants.length : 0), 0)
+  const outOfStock     = allGroups.filter(g => g.variants.reduce((s, v) => s + (v.total_quantity ?? 0), 0) === 0).length
 
   return (
     <div>
       {/* Search */}
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 12 }}>
         <input
           type="text"
-          placeholder="Search items or SKU…"
+          placeholder="Search products…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{
@@ -182,123 +232,132 @@ function StockTab({ items, squareConnected, onConnect }) {
         />
       </div>
 
-      {/* Item list */}
-      {filtered.length === 0 ? (
+      {/* Stat row */}
+      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 16, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <span>{totalProducts} Product{totalProducts !== 1 ? 's' : ''}</span>
+        <span style={{ opacity: 0.4 }}>·</span>
+        <span>{totalVariants} Variant{totalVariants !== 1 ? 's' : ''}</span>
+        <span style={{ opacity: 0.4 }}>·</span>
+        <span style={{ color: outOfStock > 0 ? '#f87171' : 'rgba(255,255,255,0.35)' }}>
+          {outOfStock} Out of Stock
+        </span>
+      </div>
+
+      {/* Group cards */}
+      {filteredGroups.length === 0 ? (
         <div style={{ padding: '32px 0', textAlign: 'center', color: 'rgba(255,255,255,0.30)', fontSize: 14 }}>
-          {items?.length === 0 ? 'No items synced yet.' : 'No items match your search.'}
+          {(items || []).length === 0 ? 'No items synced yet.' : 'No products match your search.'}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {filtered.map((item, i) => {
-            const qty   = item.total_quantity ?? 0
-            const color = qtyColor(qty)
-            const isExp = expanded === item.square_id
-            // location_breakdown comes back as "Name:qty|Name2:qty2" string from GROUP_CONCAT
-            const locs  = item.location_breakdown
-              ? item.location_breakdown.split('|').map(seg => {
-                  const lastColon = seg.lastIndexOf(':')
-                  return lastColon === -1
-                    ? { name: seg, quantity: 0 }
-                    : { name: seg.slice(0, lastColon), quantity: parseFloat(seg.slice(lastColon + 1)) || 0 }
-                })
-              : []
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filteredGroups.map(group => {
+            const hasVariants  = group.variants.length > 1
+            const totalQty     = group.variants.reduce((s, v) => s + (v.total_quantity ?? 0), 0)
+            const isExpanded   = expandedGroup === group.name
+            const variantCount = group.variants.length
 
             return (
-              <div key={item.square_id || i}>
+              <div
+                key={group.name}
+                style={{
+                  ...GLASS_CARD,
+                  overflow: 'hidden',
+                }}
+              >
+                {/* Card header row */}
                 <button
-                  onClick={() => setExpanded(isExp ? null : item.square_id)}
+                  onClick={() => {
+                    if (hasVariants) setExpanded(isExpanded ? null : group.name)
+                  }}
                   style={{
                     width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    minHeight: 56,
-                    padding: '10px 16px',
-                    background: isExp ? 'rgba(255,255,255,0.05)' : i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.018)',
-                    border: 'none',
-                    borderRadius: isExp ? '8px 8px 0 0' : 8,
-                    cursor: 'pointer',
                     gap: 12,
+                    padding: '14px 18px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: hasVariants ? 'pointer' : 'default',
                     textAlign: 'left',
                     transition: 'background 120ms',
                   }}
-                  onMouseEnter={e => { if (!isExp) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-                  onMouseLeave={e => { if (!isExp) e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.018)' }}
+                  onMouseEnter={e => { if (hasVariants) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                 >
-                  {/* Name + SKU */}
+                  {/* Name */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {item.name || 'Unnamed'}
+                    <div style={{
+                      fontSize: 15,
+                      fontWeight: 700,
+                      color: '#fff',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {group.name}
                     </div>
-                    {item.sku && (
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>
-                        SKU: {item.sku}
+                    {hasVariants && !isExpanded && (
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.30)', marginTop: 2 }}>
+                        ▸ {variantCount} sizes
                       </div>
                     )}
                   </div>
 
                   {/* Price */}
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', flexShrink: 0 }}>
-                    {fmtPrice(item.price_cents)}
+                    {fmtPrice(group.price_cents)}
                   </div>
 
-                  {/* Qty badge */}
-                  <div style={{
-                    minWidth: 44,
-                    padding: qty === 0 ? '5px 10px' : '5px 12px',
-                    borderRadius: 20,
-                    background: qty === 0 ? '#f87171' : `${color}18`,
-                    border: `1px solid ${color}55`,
-                    color: qty === 0 ? '#fff' : color,
-                    fontSize: 14,
-                    fontWeight: 700,
-                    textAlign: 'center',
-                    flexShrink: 0,
-                    letterSpacing: qty === 0 ? '0.05em' : 0,
-                  }}>
-                    {qty === 0 ? 'OUT' : qty}
-                  </div>
+                  {/* Total qty badge */}
+                  <QtyBadge qty={totalQty} />
 
                   {/* Chevron */}
-                  <div style={{
-                    fontSize: 14,
-                    color: 'rgba(255,255,255,0.30)',
-                    transform: isExp ? 'rotate(90deg)' : 'rotate(0deg)',
-                    transition: 'transform 200ms',
-                    flexShrink: 0,
-                  }}>›</div>
+                  {hasVariants && (
+                    <div style={{
+                      fontSize: 16,
+                      color: 'rgba(255,255,255,0.30)',
+                      transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                      transition: 'transform 200ms',
+                      flexShrink: 0,
+                      lineHeight: 1,
+                    }}>›</div>
+                  )}
                 </button>
 
-                {/* Expanded: location breakdown */}
-                {isExp && (
+                {/* Expanded variant rows */}
+                {isExpanded && hasVariants && (
                   <div style={{
-                    background: 'rgba(255,255,255,0.025)',
-                    border: '0 solid transparent',
-                    borderRadius: '0 0 8px 8px',
-                    padding: '12px 16px 14px',
                     borderTop: '1px solid rgba(255,255,255,0.06)',
+                    padding: '8px 18px 12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
                   }}>
-                    {locs.length === 0 ? (
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.30)' }}>No location data available.</div>
-                    ) : (
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.30)', marginBottom: 8 }}>
-                          Location Breakdown
+                    {group.variants.map((v, vi) => {
+                      const vqty = v.total_quantity ?? 0
+                      return (
+                        <div
+                          key={v.square_id || vi}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            padding: '7px 8px',
+                            borderRadius: 6,
+                          }}
+                        >
+                          <div style={{
+                            flex: 1,
+                            fontSize: 13,
+                            color: 'rgba(255,255,255,0.55)',
+                            paddingLeft: 8,
+                          }}>
+                            {v.variant || v.name}
+                          </div>
+                          <QtyBadge qty={vqty} small />
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {locs.map((loc, li) => (
-                            <div key={li} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                              <span style={{ color: 'rgba(255,255,255,0.60)' }}>{loc.name || loc.location_name || `Location ${li + 1}`}</span>
-                              <span style={{ color: qtyColor(loc.quantity ?? 0), fontWeight: 600 }}>{loc.quantity ?? 0}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {item.description && (
-                      <div style={{ marginTop: 10, fontSize: 12, color: 'rgba(255,255,255,0.35)', lineHeight: 1.5 }}>
-                        {item.description}
-                      </div>
-                    )}
+                      )
+                    })}
                   </div>
                 )}
               </div>
