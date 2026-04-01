@@ -225,7 +225,7 @@ def _ideas_block(conn: sqlite3.Connection, limit: int) -> str | None:
     return "\n".join(lines)
 
 
-def _calendar_block(conn: sqlite3.Connection, days_ahead: int = 90, days_behind: int = 14) -> str | None:
+def _calendar_block(conn: sqlite3.Connection, days_ahead: int = 30, days_behind: int = 14) -> str | None:
     rows = conn.execute(
         """SELECT title, event_type, start_dt, end_dt, location, description
            FROM events
@@ -470,7 +470,7 @@ def _finance_block(conn, limit=1):
         return f"[Finance] Error loading finance data: {e}"
 
 
-def _shows_block(conn: sqlite3.Connection, days_ahead: int = 60) -> str | None:
+def _shows_block(conn: sqlite3.Connection, days_ahead: int = 30) -> str | None:
     """Return upcoming shows within the next N days from the shows table."""
     try:
         rows = conn.execute(
@@ -617,18 +617,18 @@ def build_integration_context(member: str, conn: sqlite3.Connection, message: st
                 result = _analytics_block(conn, opts)
                 block = result if result else None
             elif platform == "calendar":
-                block = _calendar_block(conn, days_ahead=90, days_behind=14)
+                block = _calendar_block(conn, days_ahead=30, days_behind=14)
             if block:
                 blocks.append(block)
 
     # ── Calendar (fallback for members not in MEMBER_CONFIG) ───────────────
     if not config or "calendar" not in config:
-        cal_block = _calendar_block(conn)
+        cal_block = _calendar_block(conn, days_ahead=30)
         if cal_block:
             blocks.append(cal_block)
 
-    # ── Shows (next 60 days — all team members) ────────────────────────────────
-    shows_block = _shows_block(conn, days_ahead=60)
+    # ── Shows (next 30 days — all team members) ────────────────────────────────
+    shows_block = _shows_block(conn, days_ahead=30)
     if shows_block:
         blocks.append(shows_block)
 

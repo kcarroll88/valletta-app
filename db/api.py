@@ -2950,7 +2950,7 @@ async def chat(body: ChatRequest, authorization: Optional[str] = Header(None)):
             with get_db() as conn:
                 integration_ctx = build_integration_context(effective_member, conn, scoped_question)
                 band_ctx_rows = conn.execute(
-                    "SELECT key, content FROM band_context ORDER BY updated_at DESC LIMIT 20"
+                    "SELECT key, content FROM band_context ORDER BY updated_at DESC LIMIT 10"
                 ).fetchall()
             system_prompt = persona + ("\n\n" + integration_ctx if integration_ctx else "")
             if band_ctx_rows:
