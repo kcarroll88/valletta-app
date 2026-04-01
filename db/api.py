@@ -3722,7 +3722,12 @@ def _shows_sync_worker():
         col_city     = _find_col(["city"])
         col_state    = _find_col(["state"])
         col_country  = _find_col(["country"])
-        col_status   = _find_col(["status", "confirmed", "hold", "offer", "routing"])
+        # Detect checkbox-style confirmed column first — before col_status claims "confirmed".
+        # Matches headers like: confirmed, confirm, booked, ✓, done, checkbox (short/standalone).
+        _CHECKBOX_KEYWORDS = ["confirmed", "confirm", "booked", "✓", "checkbox"]
+        col_confirmed = _find_col(_CHECKBOX_KEYWORDS)
+        # Explicit status column — exclude keywords already claimed by col_confirmed.
+        col_status   = _find_col(["status", "hold", "offer", "routing"])
         col_notes    = _find_col(["notes", "note", "comment"])
         col_capacity = _find_col(["capacity", "cap"])
         col_guarantee= _find_col(["guarantee", "fee", "deal"])
@@ -3824,7 +3829,20 @@ def _shows_sync_worker():
                     _cell(col_city),
                     _cell(col_state),
                     country,
-                    _normalize_status(_cell(col_status)) or _infer_status_from_text(_cell(col_promoter)),
+                    # Status priority:
+                    # 1. Confirmed checkbox TRUE  → "Confirmed" (overrides everything)
+                    # 2. Explicit status column   → normalized value
+                    # 3. Infer from promoter/booking text
+                    # 4. Fall back to "Routing"   (better than None for unconfirmed tour dates)
+                    (lambda confirmed_val: (
+                        "Confirmed"
+                        if confirmed_val in ("TRUE", "YES", "1", "X", "✓")
+                        else (
+                            _normalize_status(_cell(col_status))
+                            or _infer_status_from_text(_cell(col_promoter))
+                            or "Routing"
+                        )
+                    ))((_cell(col_confirmed) or "").strip().upper()),
                     _cell(col_notes),
                     capacity,
                     guarantee,
@@ -3846,6 +3864,7 @@ def _shows_sync_worker():
         "venue": headers[col_venue] if col_venue is not None else None,
         "city": headers[col_city] if col_city is not None else None,
         "state": headers[col_state] if col_state is not None else None,
+        "confirmed_checkbox": headers[col_confirmed] if col_confirmed is not None else None,
         "status": headers[col_status] if col_status is not None else None,
         "notes": headers[col_notes] if col_notes is not None else None,
         "capacity": headers[col_capacity] if col_capacity is not None else None,
