@@ -519,6 +519,23 @@ export default function GlobalChat({ open, onClose, onNavigate, isMobile = false
               ].slice(-MAX_HISTORY))
             }
 
+            // Surface backend errors (e.g. DB exceptions, API failures) so the
+            // user sees them instead of a silent frozen/empty bubble.
+            if (data.type === 'error' && data.content) {
+              const bid = streamRef.current.bubbleId
+              if (bid) {
+                streamRef.current.text = data.content
+                setMessages(prev => prev.map(m =>
+                  m.id === bid
+                    ? { ...m, text: data.content, streaming: false, error: true }
+                    : m
+                ))
+                streamRef.current = { member: null, text: '', scopedQuestion: '', bubbleId: null }
+                displayTextRef.current = {}
+                charQueueRef.current   = {}
+              }
+            }
+
           } catch {}
         }
       }
