@@ -21,7 +21,7 @@ async function req(path, options = {}) {
 
 function fmtPrice(cents) {
   if (cents == null) return '—'
-  return '£' + (cents / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return '$' + (cents / 100).toFixed(2)
 }
 
 function fmtDate(str) {
@@ -36,9 +36,8 @@ function orderId(id) {
 }
 
 function qtyColor(qty) {
-  if (qty === 0)    return '#f87171'
-  if (qty <= 3)     return '#fb923c'
-  if (qty <= 10)    return '#fbbf24'
+  if (qty === 0)   return '#f87171'
+  if (qty <= 4)    return '#fbbf24'
   return '#4ade80'
 }
 
@@ -194,7 +193,15 @@ function StockTab({ items, squareConnected, onConnect }) {
             const qty   = item.total_quantity ?? 0
             const color = qtyColor(qty)
             const isExp = expanded === item.square_id
-            const locs  = item.location_breakdown || []
+            // location_breakdown comes back as "Name:qty|Name2:qty2" string from GROUP_CONCAT
+            const locs  = item.location_breakdown
+              ? item.location_breakdown.split('|').map(seg => {
+                  const lastColon = seg.lastIndexOf(':')
+                  return lastColon === -1
+                    ? { name: seg, quantity: 0 }
+                    : { name: seg.slice(0, lastColon), quantity: parseFloat(seg.slice(lastColon + 1)) || 0 }
+                })
+              : []
 
             return (
               <div key={item.square_id || i}>
@@ -604,7 +611,7 @@ function BandcampTab() {
                   </div>
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                  {o.amount_paid_cents != null ? fmtPrice(o.amount_paid_cents) : (o.amount_paid ? `£${Number(o.amount_paid).toFixed(2)}` : '—')}
+                  {o.amount_paid_cents != null ? fmtPrice(o.amount_paid_cents) : (o.amount_paid ? `$${Number(o.amount_paid).toFixed(2)}` : '—')}
                 </div>
               </div>
             </div>
