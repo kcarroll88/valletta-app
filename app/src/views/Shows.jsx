@@ -39,13 +39,53 @@ function fmtGuarantee(val) {
   return '$' + Number(val).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
+const STATUS_STYLES = {
+  // Green family — booked/done
+  'confirmed':   { stripe: '#22c55e', badge: 'rgba(34,197,94,0.2)',   text: '#4ade80', label: 'Confirmed' },
+  'on sale':     { stripe: '#16a34a', badge: 'rgba(22,163,74,0.2)',   text: '#4ade80', label: 'On Sale' },
+  'played':      { stripe: '#15803d', badge: 'rgba(21,128,61,0.2)',   text: '#4ade80', label: 'Played' },
+
+  // Amber family — needs work / in progress
+  'hold':        { stripe: '#f59e0b', badge: 'rgba(245,158,11,0.2)',  text: '#fbbf24', label: 'Hold' },
+  '1st hold':    { stripe: '#f59e0b', badge: 'rgba(245,158,11,0.2)',  text: '#fbbf24', label: '1st Hold' },
+  '2nd hold':    { stripe: '#d97706', badge: 'rgba(217,119,6,0.2)',   text: '#fbbf24', label: '2nd Hold' },
+  'offer out':   { stripe: '#eab308', badge: 'rgba(234,179,8,0.2)',   text: '#fde047', label: 'Offer Out' },
+  'offer sent':  { stripe: '#eab308', badge: 'rgba(234,179,8,0.2)',   text: '#fde047', label: 'Offer Sent' },
+  'pending':     { stripe: '#ca8a04', badge: 'rgba(202,138,4,0.2)',   text: '#fde047', label: 'Pending' },
+
+  // Blue family — routing/exploring
+  'routing':     { stripe: '#3b82f6', badge: 'rgba(59,130,246,0.2)',  text: '#60a5fa', label: 'Routing' },
+  'exploring':   { stripe: '#6366f1', badge: 'rgba(99,102,241,0.2)',  text: '#818cf8', label: 'Exploring' },
+  'potential':   { stripe: '#6366f1', badge: 'rgba(99,102,241,0.2)',  text: '#818cf8', label: 'Potential' },
+
+  // Red family — trouble/dead
+  'cancelled':   { stripe: '#ef4444', badge: 'rgba(239,68,68,0.2)',   text: '#f87171', label: 'Cancelled' },
+  'canceled':    { stripe: '#ef4444', badge: 'rgba(239,68,68,0.2)',   text: '#f87171', label: 'Cancelled' },
+  'dropped':     { stripe: '#dc2626', badge: 'rgba(220,38,38,0.2)',   text: '#f87171', label: 'Dropped' },
+  'lost':        { stripe: '#dc2626', badge: 'rgba(220,38,38,0.2)',   text: '#f87171', label: 'Lost' },
+}
+
+const getStatusStyle = (status) => {
+  const key = (status || '').toLowerCase().trim()
+  return STATUS_STYLES[key] || {
+    stripe: '#6b7280',
+    badge:  'rgba(107,114,128,0.2)',
+    text:   '#9ca3af',
+    label:  status || 'Unknown',
+  }
+}
+
+// Legacy shim — keeps existing call sites that destructure { stripe, badge } working
 function statusColors(status) {
-  const s = (status || '').toLowerCase()
-  if (s === 'confirmed') return { stripe: '#22c55e', badge: { color: '#4ade80', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)' } }
-  if (s === 'hold')      return { stripe: '#f59e0b', badge: { color: '#fbbf24', background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)' } }
-  if (s === 'pending')   return { stripe: '#6366f1', badge: { color: '#a5b4fc', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.35)' } }
-  if (s === 'cancelled') return { stripe: '#ef4444', badge: { color: '#f87171', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)' } }
-  return { stripe: '#6b7280', badge: { color: 'rgba(255,255,255,0.45)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)' } }
+  const s = getStatusStyle(status)
+  return {
+    stripe: s.stripe,
+    badge: {
+      color:      s.text,
+      background: s.badge,
+      border:     `1px solid ${s.badge.replace('0.2)', '0.35)')}`,
+    },
+  }
 }
 
 const GLASS_CARD = {
@@ -57,7 +97,7 @@ const GLASS_CARD = {
   boxShadow: '0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)',
 }
 
-const STATUS_ORDER = ['Confirmed', 'Hold', 'Pending', 'Cancelled']
+const STATUS_ORDER = ['Confirmed', 'On Sale', 'Played', 'Hold', '1st Hold', '2nd Hold', 'Offer Out', 'Offer Sent', 'Pending', 'Routing', 'Exploring', 'Potential', 'Cancelled', 'Dropped', 'Lost']
 
 function statusCounts(shows) {
   const counts = {}
@@ -71,26 +111,28 @@ function statusCounts(shows) {
 // ─── Status Pill ──────────────────────────────────────────────────────────────
 
 function StatusPill({ status, count }) {
-  const { stripe, badge } = statusColors(status)
+  const s = getStatusStyle(status)
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 6,
       padding: '5px 12px',
       borderRadius: 99,
-      ...badge,
+      background: s.badge,
+      border: `1px solid ${s.badge.replace('0.2)', '0.35)')}`,
+      color: s.text,
       fontSize: 13,
       fontWeight: 500,
       whiteSpace: 'nowrap',
     }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: stripe, display: 'inline-block', flexShrink: 0 }} />
-      {count} {status}
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.stripe, display: 'inline-block', flexShrink: 0 }} />
+      {count} {s.label}
     </div>
   )
 }
 
 // ─── Show Card ────────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS = ['Confirmed', 'Hold', 'Pending', 'Cancelled', 'TBD']
+const STATUS_OPTIONS = ['Confirmed', 'On Sale', 'Played', 'Hold', '1st Hold', '2nd Hold', 'Offer Out', 'Offer Sent', 'Pending', 'Routing', 'Exploring', 'Potential', 'Cancelled', 'Dropped', 'Lost']
 
 function ShowCard({ show, onUpdated }) {
   const [expanded,   setExpanded]   = useState(false)

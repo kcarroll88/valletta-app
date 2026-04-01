@@ -3671,6 +3671,7 @@ def _shows_sync_worker():
 
         # Detect columns from header row
         headers = [h.strip().lower() for h in values[0]]
+        detected_headers = list(values[0])  # preserve originals for debug
 
         def _find_col(keywords: list[str]) -> int | None:
             for kw in keywords:
@@ -3680,22 +3681,35 @@ def _shows_sync_worker():
             return None
 
         _STATUS_MAP = {
+            # Confirmed / green family
             "confirmed": "Confirmed",
             "yes": "Confirmed",
             "y": "Confirmed",
+            "on sale": "On Sale",
+            "onsale": "On Sale",
+            "played": "Played",
+            "done": "Played",
+            # Hold / amber family
             "hold": "Hold",
             "on hold": "Hold",
-            "1st hold": "Hold",
-            "2nd hold": "Hold",
+            "1st hold": "1st Hold",
+            "first hold": "1st Hold",
+            "2nd hold": "2nd Hold",
+            "second hold": "2nd Hold",
+            "offer out": "Offer Out",
+            "offer sent": "Offer Sent",
+            "offer": "Offer Out",
+            "offered": "Offer Out",
             "pending": "Pending",
-            "offer": "Pending",
-            "offered": "Pending",
+            # Routing / blue family
+            "routing": "Routing",
+            "potential": "Potential",
+            "exploring": "Exploring",
+            # Cancelled / red family
             "cancelled": "Cancelled",
             "canceled": "Cancelled",
-            "dropped": "Cancelled",
-            "routing": "Routing",
-            "potential": "Routing",
-            "exploring": "Routing",
+            "dropped": "Dropped",
+            "lost": "Lost",
         }
 
         def _normalize_status(raw: str | None) -> str | None:
@@ -3708,7 +3722,7 @@ def _shows_sync_worker():
         col_city     = _find_col(["city"])
         col_state    = _find_col(["state"])
         col_country  = _find_col(["country"])
-        col_status   = _find_col(["status", "confirmed", "booking", "booked", "hold", "offer", "routing"])
+        col_status   = _find_col(["status", "confirmed", "hold", "offer", "routing"])
         col_notes    = _find_col(["notes", "note", "comment"])
         col_capacity = _find_col(["capacity", "cap"])
         col_guarantee= _find_col(["guarantee", "fee", "offer"])
@@ -3792,7 +3806,9 @@ def _shows_sync_worker():
 
         conn.commit()
 
-    return {"synced": synced, "sheet_name": sheet_name, "columns_detected": {
+    return {"synced": synced, "sheet_name": sheet_name,
+            "sheet_headers": detected_headers,
+            "columns_detected": {
         "date": headers[col_date] if col_date is not None else None,
         "venue": headers[col_venue] if col_venue is not None else None,
         "city": headers[col_city] if col_city is not None else None,
