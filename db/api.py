@@ -3725,9 +3725,42 @@ def _shows_sync_worker():
         col_status   = _find_col(["status", "confirmed", "hold", "offer", "routing"])
         col_notes    = _find_col(["notes", "note", "comment"])
         col_capacity = _find_col(["capacity", "cap"])
-        col_guarantee= _find_col(["guarantee", "fee", "offer"])
-        col_promoter = _find_col(["promoter", "presenter"])
+        col_guarantee= _find_col(["guarantee", "fee", "deal"])
+        col_promoter = _find_col(["promoter", "presenter", "booking", "booker"])
         col_contact  = _find_col(["contact", "email", "phone"])
+
+        # Keywords to scan inside booking/promoter text when there's no dedicated status column.
+        # Ordered longest-first so "1st hold" beats "hold", "on sale" beats "sale", etc.
+        _STATUS_KEYWORDS_ORDERED = [
+            ("on sale",     "On Sale"),
+            ("1st hold",    "1st Hold"),
+            ("first hold",  "1st Hold"),
+            ("2nd hold",    "2nd Hold"),
+            ("second hold", "2nd Hold"),
+            ("offer out",   "Offer Out"),
+            ("offer sent",  "Offer Sent"),
+            ("on hold",     "Hold"),
+            ("hold confirmed", "Confirmed"),
+            ("confirmed",   "Confirmed"),
+            ("hold",        "Hold"),
+            ("pending",     "Pending"),
+            ("routing",     "Routing"),
+            ("potential",   "Potential"),
+            ("exploring",   "Exploring"),
+            ("cancelled",   "Cancelled"),
+            ("canceled",    "Cancelled"),
+            ("dropped",     "Dropped"),
+        ]
+
+        def _infer_status_from_text(text: str | None) -> str | None:
+            """Scan free-form booking notes for embedded status keywords."""
+            if not text:
+                return None
+            low = text.lower()
+            for kw, status in _STATUS_KEYWORDS_ORDERED:
+                if kw in low:
+                    return status
+            return None
 
         # Ensure UNIQUE index exists before running ON CONFLICT upserts
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_shows_sheet_row ON shows(sheet_row)")
@@ -3791,7 +3824,7 @@ def _shows_sync_worker():
                     _cell(col_city),
                     _cell(col_state),
                     country,
-                    _normalize_status(_cell(col_status)),
+                    _normalize_status(_cell(col_status)) or _infer_status_from_text(_cell(col_promoter)),
                     _cell(col_notes),
                     capacity,
                     guarantee,
