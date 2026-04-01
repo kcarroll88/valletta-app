@@ -149,8 +149,14 @@ async def sync(conn) -> dict:
         # ── Recent orders (SDK v44: orders.search with keyword args) ────
         try:
             from datetime import timedelta
+            # Fetch location IDs first — Square requires at least one
+            locs = list(client.locations.list().items)
+            location_ids = [loc.id for loc in locs if loc.id]
+            if not location_ids:
+                raise ValueError("No Square locations found")
             cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
             result = client.orders.search(
+                location_ids=location_ids,
                 query={"filter": {"date_time_filter": {"created_at": {"start_at": cutoff}}}},
                 limit=500,
                 return_entries=False,
