@@ -511,6 +511,30 @@ CREATE INDEX IF NOT EXISTS idx_band_context_key ON band_context(key);
 CREATE INDEX IF NOT EXISTS idx_band_context_updated ON band_context(updated_at DESC);
 
 -- ─────────────────────────────────────────
+-- SHOWS
+-- Synced from "Mo'ynoq + VALLETTA Tour '26" Google Sheet
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS shows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  show_date TEXT,           -- YYYY-MM-DD
+  venue TEXT,
+  city TEXT,
+  state TEXT,
+  country TEXT DEFAULT 'US',
+  status TEXT,              -- Confirmed, Hold, Pending, Cancelled, etc.
+  notes TEXT,
+  capacity INTEGER,
+  guarantee REAL,
+  promoter TEXT,
+  contact TEXT,
+  sheet_row INTEGER,        -- row number in the source sheet
+  source TEXT DEFAULT 'google_sheets',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_shows_date ON shows(show_date);
+
+-- ─────────────────────────────────────────
 -- APP USERS & AUTH SESSIONS
 -- Per-user Google OAuth login for the app.
 -- ─────────────────────────────────────────

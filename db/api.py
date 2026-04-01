@@ -453,6 +453,27 @@ def _init_auth_tables():
         """)
         conn.execute('CREATE INDEX IF NOT EXISTS idx_band_context_key ON band_context(key)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_band_context_updated ON band_context(updated_at DESC)')
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS shows (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              show_date TEXT,
+              venue TEXT,
+              city TEXT,
+              state TEXT,
+              country TEXT DEFAULT 'US',
+              status TEXT,
+              notes TEXT,
+              capacity INTEGER,
+              guarantee REAL,
+              promoter TEXT,
+              contact TEXT,
+              sheet_row INTEGER,
+              source TEXT DEFAULT 'google_sheets',
+              created_at TEXT DEFAULT (datetime('now')),
+              updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_shows_date ON shows(show_date)')
         conn.commit()
 
 
@@ -3579,6 +3600,253 @@ async def delete_band_context(
     with get_db() as conn:
         conn.execute("DELETE FROM band_context WHERE id=?", (context_id,))
         conn.commit()
+
+
+# ── Shows ─────────────────────────────────────────────────────────────────────
+
+class ShowUpdate(BaseModel):
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    contact: Optional[str] = None
+    promoter: Optional[str] = None
+
+
+def _parse_show_date(raw: str) -> str | None:
+    """Try multiple date formats and return YYYY-MM-DD, or None if unparseable."""
+    from datetime import datetime as _dt
+    if not raw:
+        return None
+    raw = raw.strip()
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m/%d/%y", "%d/%m/%Y", "%B %d, %Y", "%b %d, %Y"):
+        try:
+            return _dt.strptime(raw, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
+def _shows_sync_worker():
+    """Sync 'Mo'ynoq + VALLETTA Tour '26' sheet into the shows table."""
+    from db.integrations.platforms.google import _load_creds, _refresh_if_needed
+    from googleapiclient.discovery import build as _build
+
+    with get_db() as conn:
+        creds = _load_creds(conn)
+        if not creds:
+            return {"error": "Google not connected. Connect via Integrations settings."}
+        creds = _refresh_if_needed(creds, conn)
+
+        # Find the spreadsheet via Drive
+        drive = _build("drive", "v3", credentials=creds)
+        result = drive.files().list(
+            q="name contains 'Mo\\'ynoq' and mimeType='application/vnd.google-apps.spreadsheet'",
+            spaces="drive",
+            fields="files(id, name)",
+            pageSize=10,
+        ).execute()
+        files = result.get("files", [])
+        if not files:
+            # Broader fallback search
+            result2 = drive.files().list(
+                q="name contains 'VALLETTA Tour' and mimeType='application/vnd.google-apps.spreadsheet'",
+                spaces="drive",
+                fields="files(id, name)",
+                pageSize=10,
+            ).execute()
+            files = result2.get("files", [])
+        if not files:
+            return {"error": "Sheet 'Mo\\'ynoq + VALLETTA Tour \\'26' not found in Drive."}
+
+        sheet_id = files[0]["id"]
+        sheet_name = files[0]["name"]
+
+        sheets = _build("sheets", "v4", credentials=creds)
+        resp = sheets.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range="A:Z",
+        ).execute()
+        values = resp.get("values", [])
+        if not values:
+            return {"synced": 0, "sheet_name": sheet_name}
+
+        # Detect columns from header row
+        headers = [h.strip().lower() for h in values[0]]
+
+        def _find_col(keywords: list[str]) -> int | None:
+            for kw in keywords:
+                for i, h in enumerate(headers):
+                    if kw in h:
+                        return i
+            return None
+
+        col_date     = _find_col(["date"])
+        col_venue    = _find_col(["venue"])
+        col_city     = _find_col(["city"])
+        col_state    = _find_col(["state"])
+        col_country  = _find_col(["country"])
+        col_status   = _find_col(["status", "confirmed"])
+        col_notes    = _find_col(["notes", "note", "comment"])
+        col_capacity = _find_col(["capacity", "cap"])
+        col_guarantee= _find_col(["guarantee", "fee", "offer"])
+        col_promoter = _find_col(["promoter", "presenter"])
+        col_contact  = _find_col(["contact", "email", "phone"])
+
+        synced = 0
+        now = now_ts()
+        for row_idx, row in enumerate(values[1:], start=2):  # 1-indexed, skip header
+
+            def _cell(col):
+                if col is None or col >= len(row):
+                    return None
+                return row[col].strip() or None
+
+            raw_date = _cell(col_date)
+            show_date = _parse_show_date(raw_date) if raw_date else None
+
+            # Skip rows with no date and no venue — likely blank padding rows
+            venue = _cell(col_venue)
+            if not show_date and not venue:
+                continue
+
+            capacity_raw = _cell(col_capacity)
+            capacity = None
+            if capacity_raw:
+                try:
+                    capacity = int(capacity_raw.replace(",", "").replace(".", ""))
+                except ValueError:
+                    pass
+
+            guarantee_raw = _cell(col_guarantee)
+            guarantee = None
+            if guarantee_raw:
+                try:
+                    guarantee = float(guarantee_raw.replace("$", "").replace(",", ""))
+                except ValueError:
+                    pass
+
+            country = _cell(col_country) or "US"
+
+            conn.execute(
+                """INSERT INTO shows
+                     (show_date, venue, city, state, country, status, notes,
+                      capacity, guarantee, promoter, contact, sheet_row, source, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'google_sheets',?,?)
+                   ON CONFLICT(sheet_row) DO UPDATE SET
+                     show_date=excluded.show_date,
+                     venue=excluded.venue,
+                     city=excluded.city,
+                     state=excluded.state,
+                     country=excluded.country,
+                     status=excluded.status,
+                     notes=excluded.notes,
+                     capacity=excluded.capacity,
+                     guarantee=excluded.guarantee,
+                     promoter=excluded.promoter,
+                     contact=excluded.contact,
+                     updated_at=excluded.updated_at""",
+                (
+                    show_date,
+                    venue,
+                    _cell(col_city),
+                    _cell(col_state),
+                    country,
+                    _cell(col_status),
+                    _cell(col_notes),
+                    capacity,
+                    guarantee,
+                    _cell(col_promoter),
+                    _cell(col_contact),
+                    row_idx,
+                    now,
+                    now,
+                ),
+            )
+            synced += 1
+
+        # Add UNIQUE constraint support via sheet_row — ensure index exists
+        try:
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_shows_sheet_row ON shows(sheet_row)")
+        except Exception:
+            pass
+        conn.commit()
+
+    return {"synced": synced, "sheet_name": sheet_name, "columns_detected": {
+        "date": headers[col_date] if col_date is not None else None,
+        "venue": headers[col_venue] if col_venue is not None else None,
+        "city": headers[col_city] if col_city is not None else None,
+        "state": headers[col_state] if col_state is not None else None,
+        "status": headers[col_status] if col_status is not None else None,
+        "notes": headers[col_notes] if col_notes is not None else None,
+        "capacity": headers[col_capacity] if col_capacity is not None else None,
+        "guarantee": headers[col_guarantee] if col_guarantee is not None else None,
+        "promoter": headers[col_promoter] if col_promoter is not None else None,
+        "contact": headers[col_contact] if col_contact is not None else None,
+    }}
+
+
+@app.post("/api/shows/sync")
+async def sync_shows(authorization: Optional[str] = Header(None)):
+    """Sync shows from the Mo'ynoq + VALLETTA Tour '26 Google Sheet."""
+    _require_auth(authorization)
+    result = await asyncio.to_thread(_shows_sync_worker)
+    return result
+
+
+@app.get("/api/shows/sync")
+async def sync_shows_get(authorization: Optional[str] = Header(None)):
+    """GET alias for POST /api/shows/sync — convenient for browser testing."""
+    _require_auth(authorization)
+    result = await asyncio.to_thread(_shows_sync_worker)
+    return result
+
+
+@app.get("/api/shows")
+def list_shows(
+    upcoming_only: bool = True,
+    authorization: Optional[str] = Header(None),
+):
+    """List shows. upcoming_only=true (default) filters to show_date >= today."""
+    _require_auth(authorization)
+    with get_db() as conn:
+        if upcoming_only:
+            rows = conn.execute(
+                "SELECT * FROM shows WHERE show_date >= date('now') ORDER BY show_date ASC"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM shows ORDER BY show_date ASC"
+            ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+@app.patch("/api/shows/{show_id}")
+def update_show(
+    show_id: int,
+    body: ShowUpdate,
+    authorization: Optional[str] = Header(None),
+):
+    """Manually override status, notes, contact, or promoter on a show."""
+    _require_auth(authorization)
+    fields, params = [], []
+    if body.status is not None:
+        fields.append("status=?"); params.append(body.status)
+    if body.notes is not None:
+        fields.append("notes=?"); params.append(body.notes)
+    if body.contact is not None:
+        fields.append("contact=?"); params.append(body.contact)
+    if body.promoter is not None:
+        fields.append("promoter=?"); params.append(body.promoter)
+    if not fields:
+        raise HTTPException(400, "No fields to update")
+    fields.append("updated_at=?"); params.append(now_ts())
+    params.append(show_id)
+    with get_db() as conn:
+        conn.execute(f"UPDATE shows SET {', '.join(fields)} WHERE id=?", params)
+        conn.commit()
+        row = conn.execute("SELECT * FROM shows WHERE id=?", (show_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Show not found")
+    return row_to_dict(row)
 
 
 # ── Dev entry point ───────────────────────────────────────────────────────────

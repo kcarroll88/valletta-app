@@ -470,6 +470,31 @@ def _finance_block(conn, limit=1):
         return f"[Finance] Error loading finance data: {e}"
 
 
+def _shows_block(conn: sqlite3.Connection, days_ahead: int = 60) -> str | None:
+    """Return upcoming shows within the next N days from the shows table."""
+    try:
+        rows = conn.execute(
+            """SELECT show_date, venue, city, state, status, notes
+               FROM shows
+               WHERE show_date >= date('now')
+                 AND show_date <= date('now', ? || ' days')
+               ORDER BY show_date ASC""",
+            (f"+{days_ahead}",),
+        ).fetchall()
+    except Exception:
+        return None
+    if not rows:
+        return None
+    lines = [f"[SHOWS — next {days_ahead} days, {len(rows)} show(s)]"]
+    for show_date, venue, city, state, status, notes in rows:
+        location_parts = [p for p in [venue, city, state] if p]
+        location_str = ", ".join(location_parts) if location_parts else "(TBD)"
+        status_str = f" — {status}" if status else ""
+        notes_str = f" ({notes[:80]})" if notes else ""
+        lines.append(f"  {show_date}: {location_str}{status_str}{notes_str}")
+    return "\n".join(lines)
+
+
 def _files_block(member: str, conn: sqlite3.Connection, message: str) -> str | None:
     """
     Find files relevant to this team member and inject their text content.
@@ -601,6 +626,11 @@ def build_integration_context(member: str, conn: sqlite3.Connection, message: st
         cal_block = _calendar_block(conn)
         if cal_block:
             blocks.append(cal_block)
+
+    # ── Shows (next 60 days — all team members) ────────────────────────────────
+    shows_block = _shows_block(conn, days_ahead=60)
+    if shows_block:
+        blocks.append(shows_block)
 
     # ── Project files ──────────────────────────────────────────────────────
     files_block = _files_block(member, conn, message)

@@ -36,6 +36,18 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
+      {
+        id: 'shows',
+        label: 'Shows',
+        icon: (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+            <rect x="2" y="7" width="20" height="15" rx="2"/>
+            <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
+            <line x1="12" y1="12" x2="12" y2="17"/>
+            <line x1="9.5" y1="14.5" x2="14.5" y2="14.5"/>
+          </svg>
+        ),
+      },
     ],
   },
   {
