@@ -66,6 +66,7 @@ MEMBER_CONFIG = {
         "tiktok":    {"limit": 3},
         "analytics": {"limit": 1},
         "calendar":  {"limit": 30},
+        "inventory": {},
     },
     "nina": {
         "gmail":     {"limit": 10, "keywords": ["press", "feature", "interview", "review", "media", "journalist"]},
@@ -470,6 +471,37 @@ def _finance_block(conn, limit=1):
         return f"[Finance] Error loading finance data: {e}"
 
 
+def _inventory_block(conn: sqlite3.Connection) -> str | None:
+    """Return a concise inventory summary from Square catalog + inventory tables."""
+    try:
+        rows = conn.execute(
+            """SELECT ci.name, COALESCE(SUM(si.quantity), 0) AS qty
+               FROM square_catalog_items ci
+               LEFT JOIN square_inventory si ON si.catalog_item_id = ci.square_id
+                   AND si.state = 'IN_STOCK'
+               GROUP BY ci.square_id, ci.name
+               ORDER BY qty ASC"""
+        ).fetchall()
+    except Exception:
+        return None
+    if not rows:
+        return None
+
+    out_of_stock = [(name, qty) for name, qty in rows if qty <= 0]
+    in_stock = [(name, qty) for name, qty in rows if qty > 0]
+
+    lines = [f"[INVENTORY — {len(rows)} item(s), {len(out_of_stock)} out of stock]"]
+    # Show in-stock items sorted lowest-qty first (most at risk)
+    for name, qty in in_stock[:12]:
+        lines.append(f"  {name}: {int(qty)}")
+    if out_of_stock:
+        oos_names = ", ".join(name for name, _ in out_of_stock[:8])
+        if len(out_of_stock) > 8:
+            oos_names += f" (+{len(out_of_stock) - 8} more)"
+        lines.append(f"  OUT OF STOCK: {oos_names}")
+    return "\n".join(lines)
+
+
 def _shows_block(conn: sqlite3.Connection, days_ahead: int = 30) -> str | None:
     """Return upcoming shows within the next N days from the shows table."""
     try:
@@ -595,8 +627,8 @@ def build_integration_context(member: str, conn: sqlite3.Connection, message: st
     if config:
         connected = _connected_platforms(conn)
         for platform, opts in config.items():
-            # ideas, finance, analytics, calendar, and drive are stored locally — no connection required
-            if platform not in ("ideas", "finance", "analytics", "calendar", "drive") and platform not in connected:
+            # ideas, finance, analytics, calendar, drive, and inventory are stored locally — no connection required
+            if platform not in ("ideas", "finance", "analytics", "calendar", "drive", "inventory") and platform not in connected:
                 continue
             block = None
             if platform == "gmail":
@@ -618,6 +650,8 @@ def build_integration_context(member: str, conn: sqlite3.Connection, message: st
                 block = result if result else None
             elif platform == "calendar":
                 block = _calendar_block(conn, days_ahead=30, days_behind=14)
+            elif platform == "inventory":
+                block = _inventory_block(conn)
             if block:
                 blocks.append(block)
 
