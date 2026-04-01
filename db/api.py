@@ -3691,6 +3691,9 @@ def _shows_sync_worker():
         col_promoter = _find_col(["promoter", "presenter"])
         col_contact  = _find_col(["contact", "email", "phone"])
 
+        # Ensure UNIQUE index exists before running ON CONFLICT upserts
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_shows_sheet_row ON shows(sheet_row)")
+
         synced = 0
         now = now_ts()
         for row_idx, row in enumerate(values[1:], start=2):  # 1-indexed, skip header
@@ -3763,11 +3766,6 @@ def _shows_sync_worker():
             )
             synced += 1
 
-        # Add UNIQUE constraint support via sheet_row — ensure index exists
-        try:
-            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_shows_sheet_row ON shows(sheet_row)")
-        except Exception:
-            pass
         conn.commit()
 
     return {"synced": synced, "sheet_name": sheet_name, "columns_detected": {
