@@ -2462,7 +2462,7 @@ def list_inventory_items(authorization: Optional[str] = Header(None)):
         rows = conn.execute("""
             SELECT ci.*,
                    COALESCE(SUM(inv.quantity), 0) as total_quantity,
-                   GROUP_CONCAT(inv.location_name || ':' || inv.quantity, '|') as location_breakdown
+                   GROUP_CONCAT(inv.location_id || ':' || inv.quantity, '|') as location_breakdown
             FROM square_catalog_items ci
             LEFT JOIN square_inventory inv ON inv.catalog_item_id = ci.square_id
             GROUP BY ci.square_id
