@@ -3679,12 +3679,36 @@ def _shows_sync_worker():
                         return i
             return None
 
+        _STATUS_MAP = {
+            "confirmed": "Confirmed",
+            "yes": "Confirmed",
+            "y": "Confirmed",
+            "hold": "Hold",
+            "on hold": "Hold",
+            "1st hold": "Hold",
+            "2nd hold": "Hold",
+            "pending": "Pending",
+            "offer": "Pending",
+            "offered": "Pending",
+            "cancelled": "Cancelled",
+            "canceled": "Cancelled",
+            "dropped": "Cancelled",
+            "routing": "Routing",
+            "potential": "Routing",
+            "exploring": "Routing",
+        }
+
+        def _normalize_status(raw: str | None) -> str | None:
+            if not raw:
+                return None
+            return _STATUS_MAP.get(raw.strip().lower(), raw.strip().title())
+
         col_date     = _find_col(["date"])
         col_venue    = _find_col(["venue"])
         col_city     = _find_col(["city"])
         col_state    = _find_col(["state"])
         col_country  = _find_col(["country"])
-        col_status   = _find_col(["status", "confirmed"])
+        col_status   = _find_col(["status", "confirmed", "booking", "booked", "hold", "offer", "routing"])
         col_notes    = _find_col(["notes", "note", "comment"])
         col_capacity = _find_col(["capacity", "cap"])
         col_guarantee= _find_col(["guarantee", "fee", "offer"])
@@ -3753,7 +3777,7 @@ def _shows_sync_worker():
                     _cell(col_city),
                     _cell(col_state),
                     country,
-                    _cell(col_status),
+                    _normalize_status(_cell(col_status)),
                     _cell(col_notes),
                     capacity,
                     guarantee,
