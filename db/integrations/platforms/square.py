@@ -150,7 +150,7 @@ async def sync(conn) -> dict:
         try:
             from datetime import timedelta
             # Fetch location IDs first — Square requires at least one
-            locs = list(client.locations.list().items)
+            locs = client.locations.list().locations or []
             location_ids = [loc.id for loc in locs if loc.id]
             if not location_ids:
                 raise ValueError("No Square locations found")
