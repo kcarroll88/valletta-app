@@ -59,3 +59,22 @@ uploads/
 .idea/
 *.swp
 *.swo
+
+# Claude settings (local only)
+.claude/
+
+# Runtime files
+*.pid
+
+# Tour data files (contain third-party PII)
+db/tour_emails.txt
+db/tour_emails_index.txt
+db/tour_contacts.txt
+db/tour_briefing.txt
+
+# Legal documents
+*.pages
+
+# macOS app bundles
+*.app/
+Valletta.app/

@@ -39,7 +39,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH      = PROJECT_ROOT / "db" / "valletta.db"
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-BAND_PASSWORD = os.getenv("BAND_PASSWORD", "valletta2024")
+BAND_PASSWORD = os.getenv("BAND_PASSWORD", "")
 _ACTIVE_TOKENS: set[str] = set()
 
 # Google OAuth login (separate from integration OAuth)
