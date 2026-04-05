@@ -950,7 +950,7 @@ export default function Roadmap({ onNavigate }) {
             display: 'grid',
             gridTemplateColumns: `64px repeat(${CATEGORIES.length}, 1fr)`,
             borderBottom: '1px solid rgba(255,255,255,0.08)',
-            position: 'sticky', top: 0, background: 'rgba(15,15,22,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', zIndex: 10, overflow: 'hidden',
+            position: 'sticky', top: 0, background: 'rgba(15,15,22,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', zIndex: 10,
           }}>
             <div style={{ padding: '12px 0', borderRight: '1px solid rgba(255,255,255,0.07)' }} />
             {CATEGORIES.map((cat, i) => (

@@ -1265,7 +1265,7 @@ function TableView({ tasks, onTaskClick, onUpdateTask, onAddTask, isMobile }) {
     <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         {/* Sticky header */}
-        <thead style={{ overflow: 'hidden' }}>
+        <thead>
           <tr style={{
             position: 'sticky', top: 0,
             background: 'rgba(18,18,30,0.95)',
@@ -1273,7 +1273,6 @@ function TableView({ tasks, onTaskClick, onUpdateTask, onAddTask, isMobile }) {
             WebkitBackdropFilter: 'blur(12px)',
             zIndex: 10,
             height: 36,
-            overflow: 'hidden',
           }}>
             {!isMobile && (
               <th style={{ width: 24, minWidth: 24, padding: '0 4px' }} />

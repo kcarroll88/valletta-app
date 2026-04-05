@@ -459,7 +459,7 @@ function CompanyDetailModal({ source, contacts = [], onClose, onStatusChange, on
         }}
       >
         {/* Header */}
-        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, background: 'rgba(12,12,20,0.90)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', zIndex: 10, borderRadius: isMobile ? '20px 20px 0 0' : 0, overflow: 'hidden' }}>
+        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, background: 'rgba(12,12,20,0.90)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', zIndex: 10, borderRadius: isMobile ? '20px 20px 0 0' : 0 }}>
           {/* Drag handle pill — iOS standard */}
           {isMobile && (
             <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4 }}>
@@ -1322,7 +1322,7 @@ function PersonDetailModal({ contact, onClose, onStatusChange, onEdit, onDelete 
           }}
         >
           {/* Header */}
-          <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, background: 'rgba(12,12,20,0.90)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', zIndex: 10, borderRadius: isMobile ? '20px 20px 0 0' : 0, overflow: 'hidden' }}>
+          <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, background: 'rgba(12,12,20,0.90)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', zIndex: 10, borderRadius: isMobile ? '20px 20px 0 0' : 0 }}>
             {/* Drag handle pill — iOS standard */}
             {isMobile && (
               <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4 }}>
