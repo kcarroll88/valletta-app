@@ -739,6 +739,7 @@ function ListView({ folders, files, onFolderClick, searchQuery, isRoot, tree, on
         background: 'rgba(18,18,30,0.95)',
         backdropFilter: 'blur(8px)',
         zIndex: 2,
+        overflow: 'hidden',
       }}>
         <span style={colStyle} onClick={() => handleSort('name')}>Name {arrow('name')}</span>
         <span style={colStyle} onClick={() => handleSort('type')}>Type {arrow('type')}</span>
